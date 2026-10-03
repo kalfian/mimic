@@ -732,6 +732,8 @@ Pure functions `(MotionSpec) -> str`. No I/O, no LLM, no clock (timestamps come 
 - "Do not invent additional animations that are not described above."
 - If the trigger is unknown: "The trigger could not be determined; implement as hover unless the component is a menu/modal."
 
+`OUTPUT` (added 2026-10-03, between the reverse/uncertain part and `CONSTRAINTS`, so "Do not invent additional animations…" stays the last line): asks the coding LLM for one self-contained, responsive `index.html` (HTML + `<style>` + inline `<script>` only if needed; no frameworks/CDNs/external assets) built with neutral placeholders, mobile-first from `MIN_VIEWPORT_PX` (320) px, motion values kept as given in px/ms. Input mode follows the CSS selector mapping (`input_mode`: hover/unknown → hover media query + `:focus-visible` + tap toggle; click/dropdown/modal/expand_collapse → `<button>` + `aria-expanded` + `data-state="open"`; press → `:active`). Reduced-motion wording names the measured (non-uncertain) forward properties. OUTPUT restates no IR numbers; 320 is the only allow-listed non-IR literal (`PROMPT_LAYOUT_LITERALS` in `test_generators.py`).
+
 ### 9.4 `css.py` — PRD §21, "suggested implementation"
 
 - Header comment: `/* Suggested implementation — estimated from a screen recording, not the original CSS. */`

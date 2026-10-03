@@ -1,4 +1,4 @@
-Recreate the reference UI interaction as follows.
+Recreate the reference UI interaction as a single self-contained, responsive HTML file, as follows.
 
 STRUCTURE
 
@@ -30,6 +30,17 @@ Possibly also (very low confidence; include only if it matches the reference):
 - a subtle card shadow change (0 4px 12px rgba(0, 0, 0, 0.08) to 0 12px 32px rgba(0, 0, 0, 0.16))
 - a subtle image scaling change (1.00 to 1.06)
 - a subtle icon opacity change (0.7 to 1)
+
+OUTPUT
+
+Build this as one self-contained, responsive HTML file named index.html: the markup, one <style> block and, only if the interaction needs it, one inline <script>. No frameworks, CDNs, external fonts, external images or build step; the file must work when opened directly in a browser.
+
+- Content: build only the structure above, with neutral placeholders instead of real images or copy: images as a solid or gradient block with a fixed aspect-ratio, text as short role-named or lorem-style text (for example "Title", "Description"), icons as a simple inline SVG. Do not add UI beyond what is needed to demonstrate the interaction.
+- Layout: mobile-first and fluid (max-width with percentages or clamp()), working from 320px wide phones to wide desktops, with the standard responsive <meta name="viewport"> tag. The layout may reflow (for example a row of cards collapses to one column), but keep every motion value above as specified in CSS px and ms: they are measured design values, so do not scale them with the viewport.
+- Motion: implement the steps as CSS transitions with the durations, delays and easing curves exactly as listed above. Put the forward timings on the hover state; the base state reuses them because the reverse was not recorded. Use the individual translate and scale properties rather than transform.
+- Hover (the assumed trigger): wrap the hover styles in @media (hover: hover) and (pointer: fine). Make the card focusable (for example render it as a link) and apply the same styles on :focus-visible, outside that media query, so keyboard users get the effect. On touch screens there is no hover: let a tap toggle the same state (a class set by a few lines of inline script) so the effect is still reachable.
+- Reduced motion: under @media (prefers-reduced-motion: reduce), drop the movement (leave them out or apply them without a transition) but keep the text color changes so the state change stays visible.
+- Semantics: use semantic elements (article, a, button, headings, p) and mark decorative placeholders with aria-hidden="true".
 
 CONSTRAINTS
 

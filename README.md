@@ -301,6 +301,14 @@ element boxes) and before/after crops of each changed element.
 | JSON | The motion IR (schema 0.1, no per-frame samples) |
 | CSS | A suggested implementation. The original site may have used other CSS, JS or an animation library |
 
+The LLM prompt asks for **one self-contained, responsive `index.html`** (HTML, a `<style>` block,
+inline script only if needed; no frameworks, CDNs or external assets). It builds the detected
+structure with neutral placeholders (gradient blocks for images, role-named text), not the
+recording's real images or copy. The layout reflows from 320 px phones to wide desktops, while
+the measured motion values stay as given in px and ms. It also asks for hover styles behind
+`@media (hover: hover)` with focus and tap fallbacks (click and press use a real `<button>`)
+and a `prefers-reduced-motion` variant.
+
 ### 6. Add AI labels afterwards
 
 If the job ran with labeling off, the "Labels are heuristic" note has a **Label with AI**

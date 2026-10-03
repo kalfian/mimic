@@ -166,6 +166,18 @@ def _press(s: dict[str, Any]) -> None:
         r["segment_id"] = rename[r["segment_id"]]
 
 
+def _dropdown(s: dict[str, Any]) -> None:
+    _click(s)
+    s["interaction"].update(type="dropdown", pattern="menu")
+
+
+def _modal(s: dict[str, Any]) -> None:
+    """The target is the opened surface (kind ``appear``), so the prompt adds a trigger button."""
+    _click(s)
+    s["interaction"].update(type="modal", pattern="modal")
+    s["elements"][0]["kind"] = "appear"
+
+
 def _stagger(s: dict[str, Any]) -> None:
     s["relationships"] = [
         {
@@ -212,6 +224,8 @@ VARIANTS: dict[str, Callable[[], MotionSpec]] = {
     "low_confidence": low_confidence_spec,
     "click": lambda: _variant(_click),
     "press": lambda: _variant(_press),
+    "dropdown": lambda: _variant(_dropdown),
+    "modal": lambda: _variant(_modal),
     "stagger": lambda: _variant(_stagger),
     "height": lambda: _variant(_height),
     "overshoot": lambda: _variant(_overshoot),
@@ -265,6 +279,10 @@ ORDINAL_RE = re.compile(r"^\d+\.\s", re.MULTILINE)
 ROUND_STEPS = ("1", "0.5", "0.1", "0.05", "0.01", "0.001", "10")
 #: CSS-only structural literals (``translate: 0 -8px``, ``0fr``/``1fr``, ``var(--i, 0)``).
 CSS_IDENTITY = {0.0, 1.0}
+#: LLM-prompt-only layout guidance that is not a measurement: the narrowest viewport the
+#: requested HTML file must support (OUTPUT section). Keep this list minimal and explicit.
+PROMPT_LAYOUT_LITERALS = {float(llm_prompt.MIN_VIEWPORT_PX)}
+EXTRA_LITERALS = {"css": CSS_IDENTITY, "llm_prompt": PROMPT_LAYOUT_LITERALS}
 
 
 def _numbers_in(text: str) -> list[float]:
@@ -323,7 +341,7 @@ def unexplained_numbers(text: str, allowed: set[float], extra: set[float] = froz
 def test_number_provenance(variant: str, key: str) -> None:
     spec = VARIANTS[variant]()
     text = render_all(spec).model_dump()[key]
-    extra = CSS_IDENTITY if key == "css" else set()
+    extra = EXTRA_LITERALS.get(key, set())
     assert unexplained_numbers(text, allowed_numbers(spec), extra) == []
 
 
@@ -382,9 +400,9 @@ def test_technical_structure_prd18() -> None:
 
 def test_llm_prompt_structure_prd19() -> None:
     text = llm_prompt.render(sample_spec())
-    assert text.startswith("Recreate the reference UI interaction as follows.\n")
+    assert text.startswith(llm_prompt.OPENING_LINE + "\n")
     assert text.rstrip("\n").splitlines()[-1] == llm_prompt.FINAL_LINE
-    pos = _section_order(text, ["STRUCTURE", "INTERACTION", "CONSTRAINTS"])
+    pos = _section_order(text, ["STRUCTURE", "INTERACTION", "OUTPUT", "CONSTRAINTS"])
     assert pos == sorted(pos)
     assert "Create a product card containing:\n- image\n" in text
     assert "The entire product card acts as the hover target." in text
@@ -472,7 +490,7 @@ def test_low_confidence_prompt() -> None:
     assert "When the interaction starts (most likely on hover):" in text
     assert "The interaction appears to be: hover interaction (low confidence)." in text
     assert "The reverse transition was not recorded." in text
-    optional = text.split("UNCERTAIN (OPTIONAL)\n", 1)[1].split("\nCONSTRAINTS\n")[0]
+    optional = text.split("UNCERTAIN (OPTIONAL)\n", 1)[1].split("\nOUTPUT\n")[0]
     assert "a subtle image scaling change (1.00 to 1.06)" in optional
     assert "(display scale 1x as set on upload)" in text
 
@@ -488,6 +506,152 @@ def test_low_confidence_css() -> None:
     # base rule carries the forward timing when no reverse was recorded
     base = text.split(".card {\n", 1)[1].split("}", 1)[0]
     assert "transition: translate 280ms ease-out;" in base
+
+
+# --------------------------------------------------------------------------------------------
+# LLM prompt OUTPUT section: one self-contained, responsive HTML file
+# --------------------------------------------------------------------------------------------
+
+HOVER_MEDIA = "@media (hover: hover) and (pointer: fine)"
+
+
+def _output_section(text: str) -> str:
+    return text.split("\nOUTPUT\n", 1)[1].split("\nCONSTRAINTS\n", 1)[0]
+
+
+@pytest.mark.parametrize("variant", list(VARIANTS))
+def test_prompt_output_section_common(variant: str) -> None:
+    text = llm_prompt.render(VARIANTS[variant]())
+    assert text.count("\nOUTPUT\n") == 1
+    pos = _section_order(text, ["STRUCTURE", "INTERACTION", "OUTPUT", "CONSTRAINTS"])
+    assert pos == sorted(pos)
+    assert text.rstrip("\n").splitlines()[-1] == llm_prompt.FINAL_LINE
+    out = _output_section(text)
+    for needle in (
+        "one self-contained, responsive HTML file named index.html",
+        "one <style> block and, only if the interaction needs it, one inline <script>",
+        "No frameworks, CDNs, external fonts, external images or build step",
+        "opened directly in a browser",
+        # placeholders, not recorded content
+        "neutral placeholders instead of real images or copy",
+        "solid or gradient block with a fixed aspect-ratio",
+        "Do not add UI beyond what is needed to demonstrate the interaction.",
+        # responsive layout, fixed motion values
+        "mobile-first and fluid (max-width with percentages or clamp())",
+        f"working from {llm_prompt.MIN_VIEWPORT_PX}px wide phones to wide desktops",
+        '<meta name="viewport">',
+        "collapses to one column",
+        "keep every motion value above as specified in CSS px and ms",
+        "do not scale them with the viewport",
+        "durations, delays and easing curves exactly as listed above",
+        # accessibility
+        "- Reduced motion: under @media (prefers-reduced-motion: reduce), ",
+        'aria-hidden="true"',
+    ):
+        assert needle in out, needle
+
+
+@pytest.mark.parametrize("variant", list(VARIANTS))
+def test_prompt_output_section_restates_no_measurements(variant: str) -> None:
+    """OUTPUT repeats no IR number; its only literal is the allow-listed viewport width."""
+    out = _output_section(llm_prompt.render(VARIANTS[variant]()))
+    assert _numbers_in(out) == [float(llm_prompt.MIN_VIEWPORT_PX)]
+
+
+@pytest.mark.parametrize(
+    ("variant", "mode"),
+    [
+        ("sample", "hover"),
+        ("low_confidence", "hover"),
+        ("click", "toggle"),
+        ("dropdown", "toggle"),
+        ("modal", "toggle"),
+        ("press", "press"),
+    ],  # fmt: skip
+)
+def test_prompt_input_mode_matches_css_selectors(variant: str, mode: str) -> None:
+    spec = VARIANTS[variant]()
+    assert llm_prompt.input_mode(spec) == mode
+    out = _output_section(llm_prompt.render(spec))
+    sheet = css.render(spec)
+    assert (HOVER_MEDIA in out) == (mode == "hover") == (":hover" in sheet)
+    assert ("aria-expanded" in out) == (mode == "toggle") == ("data-state" in sheet)
+    assert (":active" in out) == (mode == "press") == (":active" in sheet)
+
+
+def test_prompt_output_hover_fallbacks() -> None:
+    out = _output_section(llm_prompt.render(sample_spec()))
+    assert f"- Hover: wrap the hover styles in {HOVER_MEDIA}." in out
+    assert "Make the product card focusable" in out
+    assert "apply the same styles on :focus-visible, outside that media query" in out
+    assert "let a tap toggle the same state" in out
+    assert "Put the forward timings on the hover state and the reverse timings on the base " \
+        "state" in out  # fmt: skip
+    assert "Use the individual translate and scale properties rather than transform." in out
+
+
+def test_prompt_output_low_confidence_assumes_hover() -> None:
+    out = _output_section(llm_prompt.render(low_confidence_spec()))
+    assert f"- Hover (the assumed trigger): wrap the hover styles in {HOVER_MEDIA}." in out
+    assert "Make the card focusable" in out
+    assert "the base state reuses them because the reverse was not recorded" in out
+
+
+def test_prompt_output_click_toggle() -> None:
+    out = _output_section(llm_prompt.render(VARIANTS["click"]()))
+    assert 'make the product card (or a control inside it) a <button type="button"> with ' \
+        "aria-expanded." in out  # fmt: skip
+    assert 'set data-state="open"' in out and "no hover fallback is needed" in out
+    assert "forward timings on the open state and the reverse timings" in out
+    assert "Escape" not in out and "role=" not in out
+
+
+def test_prompt_output_dropdown_and_modal() -> None:
+    dropdown = _output_section(llm_prompt.render(VARIANTS["dropdown"]()))
+    assert "Close it on Escape and on a click outside." in dropdown
+    modal = llm_prompt.render(VARIANTS["modal"]())
+    assert "The entire product card is what opens." in modal
+    out = _output_section(modal)
+    assert "add one plain placeholder <button type=\"button\"> as the trigger, with " \
+        "aria-expanded and aria-controls pointing at the product card." in out  # fmt: skip
+    assert 'role="dialog" and aria-modal="true"' in out
+    assert "return focus to the button" in out
+
+
+def test_prompt_output_press() -> None:
+    out = _output_section(llm_prompt.render(VARIANTS["press"]()))
+    assert '- Press: render the product card as a real <button type="button">' in out
+    assert "pressed styles on :active" in out
+    assert "do not wrap them in a hover media query" in out
+    assert "forward timings on the :active state and the release timings" in out
+
+
+def _uncertain_props(props: set[str]) -> MotionSpec:
+    def mutate(s: dict[str, Any]) -> None:
+        for t in s["transitions"]:
+            if t["property"] in props:
+                t["confidence"] = _conf(0.2, 0.2, 0.2, 0.2)
+
+    return _variant(mutate)
+
+
+def test_prompt_output_reduced_motion_follows_measured_properties() -> None:
+    def bullet(spec: MotionSpec) -> str:
+        out = _output_section(llm_prompt.render(spec))
+        return next(ln for ln in out.splitlines() if ln.startswith("- Reduced motion:"))
+
+    expected = (
+        "drop the movement and scaling (leave them out or apply them without a transition) "
+        "but keep the opacity, text color, and shadow changes"
+    )
+    assert expected in bullet(sample_spec())
+    # uncertain transitions (< 0.3) are not part of the main text, so not named here either
+    assert "drop the movement (" in bullet(low_confidence_spec())
+    assert "keep the text color changes" in bullet(low_confidence_spec())
+    only_moves = bullet(_uncertain_props({"box-shadow", "color", "opacity"}))
+    assert "apply the movement and scaling without a transition" in only_moves
+    no_moves = bullet(_uncertain_props({"translateX", "translateY", "scale"}))
+    assert "nothing moves; keep the opacity, text color, and shadow changes" in no_moves
 
 
 # --------------------------------------------------------------------------------------------

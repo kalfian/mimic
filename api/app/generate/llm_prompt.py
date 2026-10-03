@@ -1,10 +1,18 @@
-"""LLM-ready prompt (PRD §19, PLAN §9.3) — the primary MVP output. Pure template over the IR."""
+"""LLM-ready prompt (PRD §19, PLAN §9.3) — the primary MVP output. Pure template over the IR.
+
+The prompt asks the coding LLM for one self-contained, responsive ``index.html`` (OUTPUT
+section) built with neutral placeholders; the motion numbers stay where they were measured.
+"""
 
 from __future__ import annotations
 
 from app.generate import phrasing as ph
 from app.models.ir import MotionElement, MotionSpec, Transition
 
+OPENING_LINE = (
+    "Recreate the reference UI interaction as a single self-contained, responsive HTML file,"
+    " as follows."
+)
 FINAL_LINE = "Do not invent additional animations that are not described above."
 UNKNOWN_TRIGGER_LINE = (
     "The trigger could not be determined; implement as hover unless the component is a menu/modal."
@@ -324,9 +332,168 @@ def _uncertain(spec: MotionSpec) -> list[str]:
     return lines
 
 
+# --------------------------------------------------------------------------------------------
+# OUTPUT: the deliverable asked of the coding LLM (one self-contained, responsive HTML file)
+# --------------------------------------------------------------------------------------------
+
+#: Narrowest viewport the HTML must support. The only number in OUTPUT that does not come from
+#: the IR (generic layout guidance; allow-listed explicitly by the provenance test).
+MIN_VIEWPORT_PX = 320
+
+#: Properties that move or resize an element: dropped / made instant under reduced motion.
+_MOTION_NOUN = {
+    "translateX": "movement",
+    "translateY": "movement",
+    "scale": "scaling",
+    "scaleX": "scaling",
+    "scaleY": "scaling",
+}
+
+
+def input_mode(spec: MotionSpec) -> str:
+    """``hover`` / ``press`` / ``toggle``; same mapping as the CSS tab's selectors."""
+    it = spec.interaction
+    if it.type in ph.TOGGLE_TYPES:
+        return "toggle"
+    if it.type == "press":
+        return "press"
+    return "hover"  # hover / unknown -> hover (UNKNOWN_TRIGGER_LINE, CSS header)
+
+
+def _main_forward(spec: MotionSpec) -> list[Transition]:
+    fwd = ph.forward_segment(spec)
+    return [t for t in ph.segment_transitions(spec, fwd.id) if not ph.is_uncertain(t)]
+
+
+def _target_ref(spec: MotionSpec) -> str:
+    target = ph.effective_target(spec)
+    return _name(spec, target) if target is not None else "the component"
+
+
+def _motion_bullet(spec: MotionSpec) -> str:
+    mode = input_mode(spec)
+    state = {"hover": "hover state", "press": ":active state", "toggle": "open state"}[mode]
+    text = (
+        "- Motion: implement the steps as CSS transitions with the durations, delays and easing "
+        "curves exactly as listed above. "
+    )
+    if ph.reverse_segment(spec) is None:
+        text += (
+            f"Put the forward timings on the {state}; the base state reuses them because the "
+            "reverse was not recorded."
+        )
+    else:
+        back = "release" if spec.interaction.direction == "round_trip" else "reverse"
+        text += (
+            f"Put the forward timings on the {state} and the {back} timings on the base state "
+            "(CSS uses the transition of the state being entered)."
+        )
+    if any(t.property in ph.TRANSFORM_PROPS for t in _main_forward(spec)):
+        text += " Use the individual translate and scale properties rather than transform."
+    return text
+
+
+def _input_bullet(spec: MotionSpec) -> str:
+    it = spec.interaction
+    mode = input_mode(spec)
+    target = _target_ref(spec)
+    if mode == "hover":
+        assumed = it.type == "unknown" or it.trigger.kind == "unknown"
+        label = "Hover (the assumed trigger)" if assumed else "Hover"
+        return (
+            f"- {label}: wrap the hover styles in @media (hover: hover) and (pointer: fine). Make "
+            f"{target} focusable (for example render it as a link) and apply the same styles on "
+            ":focus-visible, outside that media query, so keyboard users get the effect. On touch "
+            "screens there is no hover: let a tap toggle the same state (a class set by a few "
+            "lines of inline script) so the effect is still reachable."
+        )
+    if mode == "press":
+        return (
+            f'- Press: render {target} as a real <button type="button"> and put the pressed '
+            "styles on :active, which works with mouse and touch; do not wrap them in a "
+            "hover media query."
+        )
+    if _opens(spec):
+        text = (
+            "- Click: the recording does not show the control, so add one plain placeholder "
+            f'<button type="button"> as the trigger, with aria-expanded and aria-controls '
+            f"pointing at {target}."
+        )
+    else:
+        text = (
+            f'- Click: make {target} (or a control inside it) a <button type="button"> with '
+            "aria-expanded."
+        )
+    text += (
+        " Toggle the open state with a few lines of inline script that flip aria-expanded and "
+        'set data-state="open"; a button works with mouse, touch and keyboard alike, so no '
+        "hover fallback is needed."
+    )
+    if it.type == "dropdown":
+        text += " Close it on Escape and on a click outside."
+    elif it.type == "modal":
+        text += (
+            ' Give the panel role="dialog" and aria-modal="true", close it on Escape and on '
+            "a backdrop click, and return focus to the button."
+        )
+    return text
+
+
+def _reduced_motion_bullet(spec: MotionSpec) -> str:
+    props = sorted({t.property for t in _main_forward(spec)}, key=ph.PROPERTY_ORDER.index)
+    moving = list(dict.fromkeys(_MOTION_NOUN[p] for p in props if p in _MOTION_NOUN))
+    kept = list(dict.fromkeys(ph.PROP_NOUN[p] for p in props if p not in _MOTION_NOUN))
+    text = "- Reduced motion: under @media (prefers-reduced-motion: reduce), "
+    if moving and kept:
+        return text + (
+            f"drop the {ph.join_and(moving)} (leave them out or apply them without a "
+            f"transition) but keep the {ph.join_and(kept)} changes so the state change stays "
+            "visible."
+        )
+    if moving:
+        return text + (
+            f"apply the {ph.join_and(moving)} without a transition (straight to the end "
+            "values), so the state still changes without motion."
+        )
+    if kept:
+        return text + f"nothing moves; keep the {ph.join_and(kept)} changes, optionally shorter."
+    return text + "remove movement and scaling but keep the state change visible."
+
+
+def _output(spec: MotionSpec) -> list[str]:
+    return [
+        "OUTPUT",
+        "",
+        "Build this as one self-contained, responsive HTML file named index.html: the markup, "
+        "one <style> block and, only if the interaction needs it, one inline <script>. No "
+        "frameworks, CDNs, external fonts, external images or build step; the file must work "
+        "when opened directly in a browser.",
+        "",
+        "- Content: build only the structure above, with neutral placeholders instead of real "
+        "images or copy: images as a solid or gradient block with a fixed aspect-ratio, text as "
+        'short role-named or lorem-style text (for example "Title", "Description"), icons as a '
+        "simple inline SVG. Do not add UI beyond what is needed to demonstrate the interaction.",
+        "- Layout: mobile-first and fluid (max-width with percentages or clamp()), working from "
+        f"{MIN_VIEWPORT_PX}px wide phones to wide desktops, with the standard responsive "
+        '<meta name="viewport"> tag. The layout may reflow (for example a row of cards '
+        "collapses to one column), but keep every motion value above as specified in CSS px "
+        "and ms: they are measured design values, so do not scale them with the viewport.",
+        _motion_bullet(spec),
+        _input_bullet(spec),
+        _reduced_motion_bullet(spec),
+        "- Semantics: use semantic elements (article, a, button, headings, p) and mark "
+        'decorative placeholders with aria-hidden="true".',
+    ]
+
+
 def render(spec: MotionSpec) -> str:
     it = spec.interaction
-    out = ["Recreate the reference UI interaction as follows.", "", *_structure(spec), ""]
+    out = [
+        OPENING_LINE,
+        "",
+        *_structure(spec),
+        "",
+    ]
     out += ["INTERACTION", "", _target_sentence(spec)]
     if it.type_confidence.band != "high":
         type_word = ph.TYPE_TITLE[it.type].lower()
@@ -337,6 +504,7 @@ def render(spec: MotionSpec) -> str:
     uncertain = _uncertain(spec)
     if uncertain:
         out += ["", *uncertain]
+    out += ["", *_output(spec)]
     out += [
         "",
         "CONSTRAINTS",

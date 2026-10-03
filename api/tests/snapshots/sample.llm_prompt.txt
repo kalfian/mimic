@@ -1,4 +1,4 @@
-Recreate the reference UI interaction as follows.
+Recreate the reference UI interaction as a single self-contained, responsive HTML file, as follows.
 
 STRUCTURE
 
@@ -30,6 +30,17 @@ When the pointer leaves the product card, reverse all properties to their origin
 - Product card movement and shadow, and product image scaling: over approximately 220ms using an ease-in-out curve.
 - Card title text color: over approximately 180ms using an ease curve.
 - Arrow icon movement and opacity: over approximately 180ms using an ease-in-out curve.
+
+OUTPUT
+
+Build this as one self-contained, responsive HTML file named index.html: the markup, one <style> block and, only if the interaction needs it, one inline <script>. No frameworks, CDNs, external fonts, external images or build step; the file must work when opened directly in a browser.
+
+- Content: build only the structure above, with neutral placeholders instead of real images or copy: images as a solid or gradient block with a fixed aspect-ratio, text as short role-named or lorem-style text (for example "Title", "Description"), icons as a simple inline SVG. Do not add UI beyond what is needed to demonstrate the interaction.
+- Layout: mobile-first and fluid (max-width with percentages or clamp()), working from 320px wide phones to wide desktops, with the standard responsive <meta name="viewport"> tag. The layout may reflow (for example a row of cards collapses to one column), but keep every motion value above as specified in CSS px and ms: they are measured design values, so do not scale them with the viewport.
+- Motion: implement the steps as CSS transitions with the durations, delays and easing curves exactly as listed above. Put the forward timings on the hover state and the reverse timings on the base state (CSS uses the transition of the state being entered). Use the individual translate and scale properties rather than transform.
+- Hover: wrap the hover styles in @media (hover: hover) and (pointer: fine). Make the product card focusable (for example render it as a link) and apply the same styles on :focus-visible, outside that media query, so keyboard users get the effect. On touch screens there is no hover: let a tap toggle the same state (a class set by a few lines of inline script) so the effect is still reachable.
+- Reduced motion: under @media (prefers-reduced-motion: reduce), drop the movement and scaling (leave them out or apply them without a transition) but keep the opacity, text color, and shadow changes so the state change stays visible.
+- Semantics: use semantic elements (article, a, button, headings, p) and mark decorative placeholders with aria-hidden="true".
 
 CONSTRAINTS
 
