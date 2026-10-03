@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
 
 import { IconSpinner } from "@/components/icons";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md";
 
 const BASE =
@@ -14,6 +14,8 @@ const VARIANTS: Record<ButtonVariant, string> = {
   secondary:
     "border border-line-strong bg-surface text-ink hover:border-ink-3 hover:bg-surface-2 active:bg-line disabled:hover:bg-surface disabled:hover:border-line-strong",
   ghost: "text-ink-2 hover:bg-surface-2 hover:text-ink active:bg-line disabled:hover:bg-transparent",
+  /** Only for the confirming button of an irreversible action (delete, disable). */
+  danger: "bg-danger text-on-ink hover:bg-danger/85 active:bg-danger disabled:hover:bg-danger",
 };
 
 const SIZES: Record<ButtonSize, string> = {

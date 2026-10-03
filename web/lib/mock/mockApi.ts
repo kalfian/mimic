@@ -15,6 +15,12 @@
  * in ~2 s (AI on), then the fixture with the new labels. Kept in memory only (a reload during or
  * after a re-run shows the original result again).
  * Jump straight to a finished result: `/jobs/<fixture job_id>` (MOCK_SAMPLE_JOB_ID).
+ *
+ * Accounts (PLAN-auth §8.3, see mockAuth.ts): every job route needs a mock session (401 / 403
+ * `password_change_required` otherwise). Jobs have owners (mockJobsRegistry.ts): users only see
+ * their own jobs (another user's job → 404 `not_found`), admins see all. Unknown-but-well-formed
+ * ids (e.g. after clearing storage) count as owned by the current user. `getHealth` returns
+ * `interpreter: null, limits: null` without a full session; `checkInterpreter` is admin-only.
  */
 
 import type { InterpreterCheck, InterpreterMode, UploadOptions, UploadProgress, UploadRequestOptions } from "../api";
@@ -24,6 +30,9 @@ import type {
   ErrorCode,
   Health,
   JobCreated,
+  JobList,
+  JobOwner,
+  JobState,
   JobStatus,
   KeyframeArtifact,
   MotionSpec,
@@ -33,6 +42,16 @@ import type {
   Stage,
 } from "../types";
 import { STAGE_LABELS, STAGE_WINDOWS } from "../types";
+import { dropMockSession, mockFailOnce, mockFailureFor, mockUserRef, optionalMockUser, requireMockAdmin, requireMockUser, resetMockAuth } from "./mockAuth";
+import {
+  allJobEntries,
+  isDeletedJob,
+  registerJob,
+  registryEntry,
+  resetMockJobsRegistry,
+  unregisterJob,
+} from "./mockJobsRegistry";
+import { currentSearch, mockLatency, mockTiming, sleep } from "./mockStore";
 import sampleResultJson from "./sample-result.json";
 
 /* ---------- scenarios ---------- */
@@ -96,10 +115,6 @@ export function isMockInterpreterScenario(value: unknown): value is MockInterpre
   return typeof value === "string" && (MOCK_INTERPRETER_SCENARIOS as readonly string[]).includes(value);
 }
 
-function currentSearch(): string {
-  return typeof window !== "undefined" && window.location ? window.location.search : "";
-}
-
 /** `?fail=<code>` or `?scenario=<name>` from a query string (default: the current page URL). */
 export function readMockScenarioFromLocation(search: string = currentSearch()): MockScenario | null {
   const params = new URLSearchParams(search);
@@ -124,17 +139,28 @@ export interface MockConfig {
   latencyMs: number;
 }
 
-const config: MockConfig = { timeScale: 1, latencyMs: 120 };
+// Shared with mockAuth.ts (same latency for every mock endpoint).
+const config: MockConfig = mockTiming;
 
 export function configureMock(patch: Partial<MockConfig>): MockConfig {
   Object.assign(config, patch);
   return { ...config };
 }
 
-/** Forget all in-memory jobs (tests). Ids still decode, only blob video URLs are lost. */
+/**
+ * Forget all in-memory job state (tests: "simulate a reload"). Ids still decode and the persisted
+ * registry (owners, deletions) and accounts stay; only blob video URLs and re-runs are lost.
+ */
 export function resetMock(): void {
   jobs.clear();
   results.clear();
+}
+
+/** Back to a fresh mock: seeded accounts (signed out), seeded jobs, no in-memory state. */
+export function resetMockData(): void {
+  resetMock();
+  resetMockJobsRegistry();
+  resetMockAuth();
 }
 
 /* ---------- helpers ---------- */
@@ -191,6 +217,8 @@ interface MockJob {
   polls: number;
   /** Wall time of the last `mockRerunInterpretation` (in memory only), null if never re-run. */
   rerunAt?: number | null;
+  /** Reported as `JobStatus.owner` (null = legacy job). Omitted in pure tests → null. */
+  owner?: JobOwner | null;
 }
 
 const jobs = new Map<string, MockJob>();
@@ -203,11 +231,22 @@ function encodeId(job: Pick<MockJob, "scenario" | "useInterpreter" | "pixelRatio
 }
 
 function lookupJob(id: string): MockJob | null {
+  if (isDeletedJob(id)) return null;
   const known = jobs.get(id);
   if (known) return known;
+  const entry = registryEntry(id);
   let job: MockJob | null = null;
   if (id === MOCK_SAMPLE_JOB_ID) {
-    job = { id, scenario: "success", useInterpreter: true, pixelRatio: "auto", createdAt: 0, filename: SAMPLE.spec.source.filename, videoUrl: null, polls: 0 };
+    job = {
+      id,
+      scenario: "success",
+      useInterpreter: true,
+      pixelRatio: "auto",
+      createdAt: entry?.createdAt ?? 0,
+      filename: entry?.filename ?? SAMPLE.spec.source.filename,
+      videoUrl: null,
+      polls: 0,
+    };
   } else {
     const m = ID_RE.exec(id);
     if (m && isMockScenario(m[1])) {
@@ -217,7 +256,7 @@ function lookupJob(id: string): MockJob | null {
         useInterpreter: m[2] === "1",
         pixelRatio: m[3] as PixelRatioOption,
         createdAt: parseInt(m[4], 36),
-        filename: SAMPLE.spec.source.filename,
+        filename: entry?.filename ?? SAMPLE.spec.source.filename,
         videoUrl: null,
         polls: 0,
       };
@@ -227,22 +266,7 @@ function lookupJob(id: string): MockJob | null {
   return job;
 }
 
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) return reject(ApiError.aborted());
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
-    function onAbort() {
-      clearTimeout(timer);
-      reject(ApiError.aborted());
-    }
-    signal?.addEventListener("abort", onAbort, { once: true });
-  });
-}
-
-const latency = (signal?: AbortSignal) => sleep(config.latencyMs * config.timeScale, signal);
+const latency = mockLatency;
 
 function httpError(code: ErrorCode, status: number, message: string): ApiError {
   return ApiError.fromResponse(status, { error: { code, message } });
@@ -291,6 +315,7 @@ export function mockJobStatusAt(job: Omit<MockJob, "polls" | "videoUrl">, now: n
     id: job.id,
     created_at: new Date(job.createdAt).toISOString(),
     options: { pixel_ratio: job.pixelRatio, use_interpreter: job.useInterpreter },
+    owner: job.owner ?? null,
   };
   const src = SAMPLE.spec.source;
   const source = { filename: job.filename, width: src.width, height: src.height, fps: src.fps_nominal, duration_s: src.duration_ms / 1000 };
@@ -345,6 +370,7 @@ function rerunStatusAt(job: Omit<MockJob, "polls" | "videoUrl">, rerunAt: number
     id: job.id,
     created_at: new Date(job.createdAt).toISOString(),
     options: { pixel_ratio: job.pixelRatio, use_interpreter: job.useInterpreter },
+    owner: job.owner ?? null,
     error: null,
     source: { filename: job.filename, width: src.width, height: src.height, fps: src.fps_nominal, duration_s: src.duration_ms / 1000 },
   };
@@ -524,11 +550,33 @@ export function buildMockResult(
   return result;
 }
 
+/* ---------- ownership (PLAN-auth U3) ---------- */
+
+const NOT_FOUND_MESSAGE = "This job does not exist. It may have been deleted.";
+
+/**
+ * The job if the signed-in mock user may see it (admin: any; user: own), with `owner` filled.
+ * Throws 401 / 403 `password_change_required` / 404 `not_found` like the real `get_job`.
+ */
+function visibleJob(id: string): MockJob {
+  const me = requireMockUser();
+  const job = lookupJob(id);
+  if (!job) throw httpError("not_found", 404, NOT_FOUND_MESSAGE);
+  const entry = registryEntry(id);
+  // Unregistered but well-formed ids (lenient, e.g. storage cleared) belong to the current user.
+  const ownerId = entry ? entry.ownerId : me.id;
+  if (me.role !== "admin" && ownerId !== me.id) throw httpError("not_found", 404, NOT_FOUND_MESSAGE);
+  job.owner = mockUserRef(ownerId);
+  return job;
+}
+
 /* ---------- endpoints (same signatures as lib/api.ts) ---------- */
 
 export async function mockGetHealth(signal?: AbortSignal): Promise<Health> {
   await latency(signal);
   const check = interpreterCheckFor(readMockInterpreterScenario());
+  // Anonymous / forced password change: public subset only (PLAN-auth A12).
+  if (!optionalMockUser()) return { status: "ok", version: "0.1.0-mock", ffmpeg: true, interpreter: null, limits: null };
   return {
     status: "ok",
     version: "0.1.0-mock",
@@ -576,7 +624,9 @@ function interpreterCheckFor(scenario: MockInterpreterScenario): InterpreterChec
   }
 }
 
+/** Admin only, like the real route (403 `forbidden` for users). */
 export async function mockCheckInterpreter(signal?: AbortSignal, scenario: MockInterpreterScenario = readMockInterpreterScenario()): Promise<InterpreterCheck> {
+  requireMockAdmin();
   const check = interpreterCheckFor(scenario);
   // Simulate the round trip (capped so the "timeout" scenario doesn't actually wait 15 s).
   await sleep(Math.min(2000, Math.max(300, check.latency_ms ?? 800)) * config.timeScale, signal);
@@ -585,8 +635,7 @@ export async function mockCheckInterpreter(signal?: AbortSignal, scenario: MockI
 
 export async function mockGetJob(id: string, signal?: AbortSignal): Promise<JobStatus> {
   await latency(signal);
-  const job = lookupJob(id);
-  if (!job) throw httpError("not_found", 404, "Job not found.");
+  const job = visibleJob(id);
   job.polls += 1;
   if (job.scenario === "flaky" && job.polls % 3 === 0) throw ApiError.network();
   return mockJobStatusAt(job, Date.now());
@@ -594,8 +643,7 @@ export async function mockGetJob(id: string, signal?: AbortSignal): Promise<JobS
 
 export async function mockGetResult(id: string, signal?: AbortSignal): Promise<ResultEnvelope> {
   await latency(signal);
-  const job = lookupJob(id);
-  if (!job) throw httpError("not_found", 404, "Job not found.");
+  const job = visibleJob(id);
   if (mockJobStatusAt(job, Date.now()).status !== "succeeded") throw httpError("not_ready", 409, "The result is not ready yet.");
   let result = results.get(id);
   if (!result) {
@@ -608,8 +656,7 @@ export async function mockGetResult(id: string, signal?: AbortSignal): Promise<R
 /** Same contract as `rerunInterpretation` in lib/api.ts (409 while running / for failed jobs). */
 export async function mockRerunInterpretation(id: string, useInterpreter = true, signal?: AbortSignal): Promise<JobStatus> {
   await latency(signal);
-  const job = lookupJob(id);
-  if (!job) throw httpError("not_found", 404, "This job does not exist. It may have been deleted.");
+  const job = visibleJob(id);
   const now = Date.now();
   const current = mockJobStatusAt(job, now);
   if (current.status === "queued" || current.status === "processing") {
@@ -629,6 +676,7 @@ export async function mockUploadVideo(
   request: UploadRequestOptions = {},
 ): Promise<JobCreated> {
   const { signal } = request;
+  const me = requireMockUser();
   const scenario: MockScenario = request.mockScenario ?? readMockScenarioFromLocation() ?? "success";
   const uploadFailure = (MOCK_UPLOAD_FAILURES as readonly string[]).includes(scenario) ? (scenario as MockUploadFailure) : null;
 
@@ -658,8 +706,76 @@ export async function mockUploadVideo(
     filename: file.name,
     videoUrl: typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : null,
     polls: 0,
+    owner: mockUserRef(me.id),
   };
   job.id = encodeId(job);
   jobs.set(job.id, job);
+  registerJob({ id: job.id, ownerId: me.id, filename: file.name, createdAt });
   return { id: job.id, status: "queued", created_at: new Date(createdAt).toISOString() };
+}
+
+export interface MockListJobsQuery {
+  owner?: string;
+  status?: JobState;
+  limit?: number;
+  cursor?: string | null;
+}
+
+const CURSOR_RE = /^o:(\d+)$/;
+
+/**
+ * Same contract as `listJobs` in lib/api.ts: newest first, `next_cursor` (opaque here: an offset),
+ * users see only their own jobs, admins all (`owner` filters; ids other than self need admin).
+ * `?fail=network_error` / `?fail=unauthenticated` fail the first call per page load.
+ */
+export async function mockListJobs(query: MockListJobsQuery = {}, signal?: AbortSignal): Promise<JobList> {
+  await latency(signal);
+  const scenario = mockFailOnce("listJobs");
+  if (scenario === "unauthenticated") throw dropMockSession();
+  const me = requireMockUser();
+  if (scenario === "network_error") throw ApiError.network();
+
+  const limit = query.limit ?? 50;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw httpError("invalid_request", 422, "limit must be between 1 and 200.");
+  let offset = 0;
+  if (query.cursor) {
+    const m = CURSOR_RE.exec(query.cursor);
+    if (!m) throw httpError("invalid_request", 422, "The cursor is invalid.");
+    offset = Number(m[1]);
+  }
+  let ownerFilter: string | null | undefined; // undefined = no filter
+  if (query.owner === "me") ownerFilter = me.id;
+  else if (query.owner) {
+    if (me.role !== "admin" && query.owner !== me.id) throw httpError("forbidden", 403, "You don't have permission to do this.");
+    ownerFilter = query.owner;
+  } else if (me.role !== "admin") ownerFilter = me.id;
+
+  const now = Date.now();
+  const rows = allJobEntries()
+    .filter((e) => ownerFilter === undefined || e.ownerId === ownerFilter)
+    .sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
+    .flatMap((e) => {
+      const job = lookupJob(e.id);
+      if (!job) return [];
+      job.owner = mockUserRef(e.ownerId);
+      return [mockJobStatusAt(job, now)];
+    })
+    .filter((j) => !query.status || j.status === query.status);
+  const items = rows.slice(offset, offset + limit);
+  const next = offset + limit < rows.length ? `o:${offset + limit}` : null;
+  return { items, next_cursor: next };
+}
+
+/** Same contract as `deleteJob` in lib/api.ts (204; other user's job → 404). Works while running. */
+export async function mockDeleteJob(id: string, signal?: AbortSignal): Promise<void> {
+  await latency(signal);
+  if (mockFailureFor("deleteJob") === "not_found") {
+    requireMockUser();
+    throw httpError("not_found", 404, NOT_FOUND_MESSAGE);
+  }
+  const job = visibleJob(id);
+  if (job.videoUrl?.startsWith("blob:") && typeof URL.revokeObjectURL === "function") URL.revokeObjectURL(job.videoUrl);
+  jobs.delete(id);
+  results.delete(id);
+  unregisterJob(id);
 }

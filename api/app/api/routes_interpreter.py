@@ -2,6 +2,7 @@
 
 Unlike ``/api/health`` this may make real network calls / spawn the CLI, so it is an explicit
 POST the UI triggers on demand. The work lives in :func:`app.interpret.check.check_interpreter`.
+Admin only (PLAN-auth U4): 401 anonymous, 403 ``password_change_required`` / ``forbidden``.
 
 Secrets: the configured base URL may embed credentials and the API key is secret, so nothing
 from the exception (whose text can contain URLs) is logged or returned, only its type name.
@@ -17,6 +18,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.deps import ServicesDep
 from app.api.schemas import InterpreterCheck
+from app.auth.deps import AdminDep
 from app.core.errors import DEFAULT_MESSAGES, ErrorCode
 from app.interpret.check import check_interpreter
 
@@ -26,7 +28,7 @@ router = APIRouter(tags=["interpreter"])
 
 
 @router.post("/api/interpreter/check", response_model=InterpreterCheck)
-async def check_interpreter_route(services: ServicesDep) -> JSONResponse:
+async def check_interpreter_route(services: ServicesDep, _admin: AdminDep) -> JSONResponse:
     try:
         result = await run_in_threadpool(check_interpreter, services.settings)
     except Exception as exc:  # never log/return exc text: it may contain the URL or key

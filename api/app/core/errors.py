@@ -30,6 +30,20 @@ class ErrorCode(StrEnum):
     NOT_FOUND = "not_found"
     NOT_READY = "not_ready"
     ALREADY_RUNNING = "already_running"
+    # auth / accounts (PLAN-auth §3.2)
+    UNAUTHENTICATED = "unauthenticated"
+    INVALID_CREDENTIALS = "invalid_credentials"
+    ACCOUNT_DISABLED = "account_disabled"
+    FORBIDDEN = "forbidden"
+    PASSWORD_CHANGE_REQUIRED = "password_change_required"
+    ORIGIN_NOT_ALLOWED = "origin_not_allowed"
+    TOO_MANY_ATTEMPTS = "too_many_attempts"
+    SETUP_REQUIRED = "setup_required"
+    LAST_ADMIN = "last_admin"
+    SELF_ACTION_FORBIDDEN = "self_action_forbidden"
+    USERNAME_TAKEN = "username_taken"
+    WEAK_PASSWORD = "weak_password"
+    CURRENT_PASSWORD_INCORRECT = "current_password_incorrect"
 
 
 ERROR_HTTP_STATUS: dict[ErrorCode, int] = {
@@ -47,6 +61,20 @@ ERROR_HTTP_STATUS: dict[ErrorCode, int] = {
     ErrorCode.NOT_FOUND: 404,
     ErrorCode.NOT_READY: 409,
     ErrorCode.ALREADY_RUNNING: 409,
+    ErrorCode.UNAUTHENTICATED: 401,
+    ErrorCode.INVALID_CREDENTIALS: 401,
+    ErrorCode.ACCOUNT_DISABLED: 403,
+    ErrorCode.FORBIDDEN: 403,
+    ErrorCode.PASSWORD_CHANGE_REQUIRED: 403,
+    ErrorCode.ORIGIN_NOT_ALLOWED: 403,
+    ErrorCode.TOO_MANY_ATTEMPTS: 429,
+    ErrorCode.SETUP_REQUIRED: 409,
+    ErrorCode.LAST_ADMIN: 409,
+    ErrorCode.SELF_ACTION_FORBIDDEN: 409,
+    ErrorCode.USERNAME_TAKEN: 409,
+    ErrorCode.WEAK_PASSWORD: 422,
+    # 422 on purpose: a 401 would read as "session expired" to the client.
+    ErrorCode.CURRENT_PASSWORD_INCORRECT: 422,
 }
 
 #: Default user-facing message per code. Callers may pass a more specific message.
@@ -89,6 +117,25 @@ DEFAULT_MESSAGES: dict[ErrorCode, str] = {
     ErrorCode.NOT_FOUND: "This job does not exist. It may have been deleted.",
     ErrorCode.NOT_READY: "The result is not ready yet.",
     ErrorCode.ALREADY_RUNNING: "This job is still being processed. Wait until it finishes.",
+    ErrorCode.UNAUTHENTICATED: ("You are not signed in, or your session expired. Sign in again."),
+    ErrorCode.INVALID_CREDENTIALS: "Wrong username or password.",
+    ErrorCode.ACCOUNT_DISABLED: "This account is disabled. Ask an admin to enable it.",
+    ErrorCode.FORBIDDEN: "You don't have permission to do this.",
+    ErrorCode.PASSWORD_CHANGE_REQUIRED: "Set a new password before continuing.",
+    ErrorCode.ORIGIN_NOT_ALLOWED: (
+        "This request came from a page that is not allowed to use this API."
+    ),
+    ErrorCode.TOO_MANY_ATTEMPTS: "Too many failed attempts. Wait a few minutes and try again.",
+    ErrorCode.SETUP_REQUIRED: (
+        "No admin account exists yet. On the API host, run `make create-admin`."
+    ),
+    ErrorCode.LAST_ADMIN: ("This is the last active admin. Make another user an admin first."),
+    ErrorCode.SELF_ACTION_FORBIDDEN: "You can't do this to your own account.",
+    ErrorCode.USERNAME_TAKEN: "That username is already taken.",
+    ErrorCode.WEAK_PASSWORD: (
+        "Passwords need at least 12 characters and must not match the username."
+    ),
+    ErrorCode.CURRENT_PASSWORD_INCORRECT: "The current password is wrong.",
 }
 
 
@@ -100,17 +147,24 @@ RERUN_UNAVAILABLE_MESSAGE = (
 
 
 class PipelineError(Exception):
-    """Expected, user-explainable failure. Anything else is reported as ``internal_error``."""
+    """Expected, user-explainable failure. Anything else is reported as ``internal_error``.
+
+    ``headers`` are extra response headers for HTTP-time errors (e.g. ``Retry-After`` on
+    ``too_many_attempts``); the app's ``PipelineError`` handler copies them onto the response.
+    """
 
     def __init__(
         self,
         code: ErrorCode | str,
         message: str | None = None,
         http_status: int | None = None,
+        *,
+        headers: dict[str, str] | None = None,
     ) -> None:
         self.code = ErrorCode(code)
         self.message = message or DEFAULT_MESSAGES[self.code]
         self.http_status = http_status or ERROR_HTTP_STATUS[self.code]
+        self.headers: dict[str, str] = dict(headers or {})
         super().__init__(f"{self.code}: {self.message}")
 
     def to_body(self) -> dict[str, dict[str, str]]:

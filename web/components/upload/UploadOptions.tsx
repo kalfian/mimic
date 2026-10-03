@@ -19,14 +19,17 @@ export function UploadOptions({
   health,
   check,
   disabled,
+  canTestInterpreter,
 }: {
   options: Options;
   onChange: (next: Options) => void;
   health: UseHealthResult;
   check: UseInterpreterCheckResult;
   disabled: boolean;
+  /** Admins only: "Test connection" (POST /api/interpreter/check is admin-only). */
+  canTestInterpreter: boolean;
 }) {
-  const available = health.health?.interpreter.available === true;
+  const available = health.health?.interpreter?.available === true;
   const aiOn = options.useInterpreter && available;
 
   return (
@@ -117,7 +120,7 @@ export function UploadOptions({
             )}
           </p>
 
-          <InterpreterStatus health={health} check={check} />
+          <InterpreterStatus health={health} check={check} canTest={canTestInterpreter} />
         </div>
       </fieldset>
     </div>

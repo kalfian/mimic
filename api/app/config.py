@@ -65,6 +65,18 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:3000"],
         description="Comma-separated list in the env var.",
     )
+    # ---- accounts / sessions (PLAN-auth A1, A2) ------------------------------------------------
+    session_idle_minutes: int = Field(
+        default=720, gt=0, description="A session expires after this long without a request."
+    )
+    session_absolute_hours: int = Field(
+        default=168, gt=0, description="A session expires this long after sign-in, regardless."
+    )
+    cookie_secure: bool = Field(
+        default=False,
+        description="MIMIC_COOKIE_SECURE=1 adds `Secure` to the session cookie (HTTPS only).",
+    )
+
     ffmpeg_bin: str = "ffmpeg"
     ffprobe_bin: str = "ffprobe"
     debug: bool = Field(default=False, description="MIMIC_DEBUG=1 writes jobs/<id>/debug/ dumps.")
@@ -83,6 +95,25 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [o.strip() for o in v.split(",") if o.strip()]
         return v
+
+    @field_validator("cors_origins", mode="after")
+    @classmethod
+    def _no_wildcard_origin(cls, v: list[str]) -> list[str]:
+        # With credentialed CORS, "*" makes Starlette echo any origin (PLAN-auth A8).
+        if any(o == "*" for o in v):
+            raise ValueError(
+                "MIMIC_CORS_ORIGINS must list explicit origins; '*' is not allowed because the "
+                "API uses credentialed (cookie) requests"
+            )
+        return v
+
+    @property
+    def session_idle_seconds(self) -> int:
+        return self.session_idle_minutes * 60
+
+    @property
+    def session_absolute_seconds(self) -> int:
+        return self.session_absolute_hours * 3600
 
     # ---- derived paths / limits -------------------------------------------------------------
 

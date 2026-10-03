@@ -13,6 +13,10 @@
  *   type      11 / 12 / 13 / 14 / 16 / 20 / 28 px; weights 400 / 500 / 600 only.
  *   radius    3 px (chips, bars, inputs) and 6 px (panels, buttons). Nothing else.
  *   elevation none; panels are separated by 1 px rules. Only the dropzone drag state tints.
+ *             Dialogs and menus are the only layered surfaces: line-strong frame + a dimmed
+ *             backdrop (dialogs), still no shadow.
+ *   motion    120–150 ms ease-out for state changes; overlays fade/slide 4 px. All of it is
+ *             removed by prefers-reduced-motion (rule at the end of this file).
  */
 
 :root {
@@ -227,6 +231,47 @@
 }
 .pulse {
   animation: mimic-pulse 1.4s ease-in-out infinite;
+}
+
+/* ---------- overlays ---------- */
+
+.mimic-dialog::backdrop {
+  background: color-mix(in oklab, var(--ink) 38%, transparent);
+}
+@media (prefers-color-scheme: dark) {
+  .mimic-dialog::backdrop {
+    background: color-mix(in oklab, #000 62%, transparent);
+  }
+}
+.mimic-dialog[open] {
+  animation: mimic-overlay-in 140ms ease-out;
+}
+.mimic-dialog[open]::backdrop {
+  animation: mimic-fade-in 140ms ease-out;
+}
+.mimic-pop {
+  animation: mimic-overlay-in 120ms ease-out;
+}
+/* A modal dialog makes the page inert; also stop it scrolling underneath. */
+html:has(dialog[open]) {
+  overflow: hidden;
+}
+
+@keyframes mimic-overlay-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@keyframes mimic-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Loading placeholders: invisible for the first 400 ms, so fast answers never flash a spinner. */
+.reveal-late {
+  animation: mimic-fade-in 200ms ease-out 400ms both;
 }
 
 @media (prefers-reduced-motion: reduce) {

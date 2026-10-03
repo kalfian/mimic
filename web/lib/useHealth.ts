@@ -2,8 +2,10 @@
  * React hooks for backend/interpreter status on the upload page (client components only).
  *
  * - `useHealth()` fetches `GET /api/health` once on mount: drives whether the "Use AI labeling"
- *   toggle is enabled (`health.interpreter.available`) and which mode is configured.
+ *   toggle is enabled (`health?.interpreter?.available`) and which mode is configured.
+ *   `interpreter` / `limits` are null without a full session (PLAN-auth A12).
  * - `useInterpreterCheck()` runs `POST /api/interpreter/check` on demand ("Test connection").
+ *   Admin only: users get 403 `forbidden`, so only render the button for admins.
  *
  * Interpreter configuration (endpoint, model, API key) is server-side env only. The browser never
  * sees or sends credentials; these hooks only read status.

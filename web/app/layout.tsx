@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
+import { AuthGate } from "@/components/auth/AuthGate";
 import { SiteHeader } from "@/components/SiteHeader";
 
 import "./globals.css";
@@ -43,7 +44,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         </a>
         <SiteHeader />
         <main id="main" className="flex-1">
-          {children}
+          <AuthGate>{children}</AuthGate>
         </main>
       </body>
     </html>

@@ -5,13 +5,15 @@ accordion, ...) and gives you a motion spec: what moved, by how much, when, and 
 easing. The numbers come from measuring the video's pixels with OpenCV, so they are estimates,
 not the original CSS. Optional AI labeling names the elements. The result comes in four
 formats: an **LLM prompt** you can paste into a coding agent, a technical spec, the JSON spec
-(called the IR, Mimic's intermediate representation) and suggested CSS.
+(called the IR, Mimic's intermediate representation) and suggested CSS. Access needs an
+account: an admin creates users, and each user sees only their own jobs.
 
 ![Result page: video preview, detected interaction, motion timeline](docs/screenshots/result.png)
 
 Contents: [Prerequisites](#prerequisites) · [Setup](#setup) · [Run](#run) ·
-[How to use](#how-to-use) · [AI labeling](#ai-labeling-optional) · [CLI](#cli-analysis-without-the-server) ·
-[Tests & eval](#tests-and-synthetic-evaluation) · [Make targets](#make-targets) ·
+[Accounts](#first-admin-and-user-management) · [How to use](#how-to-use) ·
+[AI labeling](#ai-labeling-optional) · [CLI](#cli-analysis-without-the-server) ·
+[Tests & eval](#tests-and-synthetic-evaluation) · [Make targets](#make-targets) · [HTTP API](#http-api) ·
 [Debugging](#debugging-mimic_debug) · [Troubleshooting](#troubleshooting) ·
 [Architecture](#architecture) · [Limitations](#known-limitations)
 
@@ -41,6 +43,7 @@ cd mimic
 make setup                                  # check-tools → uv sync (api/) → pnpm install (web/) → data/jobs/
 cp .env.example .env                        # backend settings (optional, all values have defaults)
 cp web/.env.local.example web/.env.local    # frontend settings (optional, defaults shown below)
+make create-admin                           # first admin account (prompts for username + password)
 ```
 
 `make setup` ends by printing the OpenCV and NumPy versions. If that line appears, the backend
@@ -55,7 +58,10 @@ is ready.
 | `MIMIC_INTERPRETER` | `claude_cli` | AI labeling backend: `claude_cli`, `openai_compat` or `none` (see [AI labeling](#ai-labeling-optional)) |
 | `MIMIC_CLAUDE_MODEL` | `sonnet` | Model alias passed to `claude --model` |
 | `MIMIC_LLM_BASE_URL` / `MIMIC_LLM_API_KEY` / `MIMIC_LLM_MODEL` | unset | Only for `openai_compat` |
-| `MIMIC_CORS_ORIGINS` | `http://localhost:3000` | Browser origins allowed to call the API |
+| `MIMIC_CORS_ORIGINS` | `http://localhost:3000` | Comma-separated browser origins allowed to call the API. Explicit origins only: `*` is rejected at startup because requests carry the session cookie |
+| `MIMIC_SESSION_IDLE_MINUTES` | `720` (12 h) | A session ends after this long without a request |
+| `MIMIC_SESSION_ABSOLUTE_HOURS` | `168` (7 days) | A session ends this long after sign-in, active or not |
+| `MIMIC_COOKIE_SECURE` | `0` | `1` adds `Secure` to the session cookie. Set it when the app is served over HTTPS |
 | `MIMIC_FFMPEG_BIN` / `MIMIC_FFPROBE_BIN` | `ffmpeg` / `ffprobe` | Set these if FFmpeg is not on `PATH` |
 | `MIMIC_DEBUG` | `0` | `1` writes per-job debug dumps (see [Debugging](#debugging-mimic_debug)) |
 
@@ -63,7 +69,7 @@ is ready.
 
 | Variable | Default | What it does |
 |---|---|---|
-| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8000` | The API base URL. The browser calls it directly |
+| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8000` | The API base URL. The browser calls it directly. Use the **same hostname** as the address you open the app on (both `localhost`, not one `127.0.0.1`), or sign-in won't work (see [Troubleshooting](#troubleshooting)) |
 | `NEXT_PUBLIC_API_MOCK` | `0` | `1` runs the UI against a fake in-browser API and a fixture result, so you don't need a backend |
 
 Secrets such as `MIMIC_LLM_API_KEY` go only in your local `.env`. Never put them in the
@@ -79,8 +85,12 @@ make dev-api      # FastAPI on http://localhost:8000 (uvicorn --reload)
 make dev-web      # Next.js on http://localhost:3000
 ```
 
-Then open **http://localhost:3000**. `http://localhost:8000/api/health` should report
-`"ffmpeg": true`.
+Then open **http://localhost:3000** and sign in with the admin account from `make create-admin`
+(next section). `http://localhost:8000/api/health` should report `"ffmpeg": true`. Without a
+session it reports `"interpreter": null` and `"limits": null`, which is expected.
+
+On its first start after an upgrade from a version without accounts, the API migrates
+`data/mimic.db` and first writes a backup next to it (`mimic.db.pre-auth-<UTC time>.bak`).
 
 `make dev-api` restarts on every file edit under `api/`. A restart interrupts any running job,
 and that job ends as `failed` / `interrupted`. When you are only using the app, run the API
@@ -95,6 +105,111 @@ cd api && uv run uvicorn app.main:app --port 8000
 can also go straight to the fixture result at
 `/jobs/3f2b9c1d8e7a4b6c9d0e1f2a3b4c5d6e`. The scenario query params (`?fail=…`,
 `?scenario=…`, `?interpreter=…`) are listed in [`web/lib/README.md`](web/lib/README.md#mock-mode).
+Mock mode has fake accounts (`admin`, `user`, `alice`, `newbie` with a forced password change,
+`disabled`): any non-empty password signs in, except the literal `wrong`. That is a stand-in for UI
+work, not security.
+
+## First admin and user management
+
+There is no sign-up and there are no default credentials. Until the first admin exists, the
+login page shows setup instructions instead of a form, and the API answers sign-ins with
+`setup_required`.
+
+**Create the first admin** on the API host:
+
+```bash
+make create-admin                              # prompts for the username, then the password twice
+make create-admin USER=admin                   # username given, password prompted
+make create-admin USER=admin PASSWORD_STDIN=1 < pw.txt   # scripts: one line from stdin
+```
+
+Passwords are prompted for or read from stdin, never passed as arguments. They need 12–256
+characters and must not equal the username. Usernames are 3–32 characters: lowercase letters,
+digits, `.`, `_`, `-`. The first admin takes over every job that existed before accounts
+("Assigned N existing jobs to admin."). Running `create-admin` again later creates another admin
+and reassigns nothing.
+
+**Sign in.** Open the app and sign in. The header then shows the signed-in user and, for admins,
+the **Users** page.
+
+![Sign-in page](docs/screenshots/login.png)
+
+**Create users** on **Users → Create user** (username and role). Mimic generates a temporary
+password and shows it **once**. Give it to the person over a private channel.
+
+![Users page with the row actions menu](docs/screenshots/admin-users.png)
+
+![Temporary password shown once after creating a user](docs/screenshots/admin-temp-password.png)
+
+At the first sign-in with a temporary password, the user has to choose their own password before
+they can do anything else. Changing a password signs out every other browser of that account.
+Anyone can change their own password later from the user menu (**Change password**,
+`/account/password`).
+
+![Forced password change at the first sign-in](docs/screenshots/change-password.png)
+
+The row menu on **Users** has: make admin / make regular user, disable / enable, reset password
+(a new temporary password, again shown once), and delete. Disabling, resetting or changing the
+role signs the account out at once: their next request gets 401 and they land on the login page.
+Deleting an account also deletes all of its jobs and files, including a job that is still
+running. Admins can't disable, reset or delete their own account, and the **last active admin**
+can't be demoted, disabled or deleted. The UI greys those actions out with the reason, and the
+API refuses them (`self_action_forbidden`, `last_admin`).
+
+**From the command line** (on the API host, same data dir as the API):
+
+```bash
+make list-users                                # username, role, active, must-change, job count
+make reset-password USER=alice                 # break-glass: prompts for a new password
+make reset-password USER=admin PASSWORD_STDIN=1 < pw.txt
+make clean-jobs                                # delete every job (rows + files), keep accounts
+make reset-data                                # wipe everything, accounts included
+```
+
+`reset-password` is for a forgotten admin password: it sets the password you type (no forced
+change), re-enables the account and signs out all of its sessions. `clean-jobs` keeps users and
+sessions. `reset-data` deletes the job DB (with every account) and `data/jobs/`, so run
+`make create-admin` again afterwards. Both honour an exported `MIMIC_DATA_DIR`; `reset-data`
+doesn't read `.env`, so export the variable if you only set it there.
+
+### Roles and permissions
+
+| Action | User | Admin |
+|---|---|---|
+| Upload and analyze | yes, owns the job | yes, owns the job |
+| See jobs (list, result, video, keyframes) | own jobs only | every job, filter by owner |
+| Re-run AI labeling on a job | own jobs | every job |
+| Delete a job | own jobs | every job |
+| AI labeling opt-in per upload | yes | yes |
+| **Test connection** (`POST /api/interpreter/check`) | no (button hidden, API 403) | yes |
+| Manage users (Users page, `/api/admin/users`) | no (403) | yes |
+| Change own password | yes | yes |
+
+Someone else's job answers **404**, as if it didn't exist. Jobs left without an owner (only
+possible from before accounts) are visible to admins only and show as **Legacy**.
+
+### Sessions and security
+
+- **Session:** an opaque random token in the `mimic_session` cookie (`HttpOnly`,
+  `SameSite=Lax`, host-only, `Secure` with `MIMIC_COOKIE_SECURE=1`). The server stores only its
+  SHA-256 hash. It ends after 12 h without activity or 7 days after sign-in
+  (`MIMIC_SESSION_IDLE_MINUTES`, `MIMIC_SESSION_ABSOLUTE_HOURS`), on sign-out, and whenever an
+  admin disables the account, resets its password or changes its role.
+- **Passwords** are hashed with scrypt (stdlib, per-password salt). Temporary passwords are
+  generated by the server, shown once and never stored in plain text. No password, token or
+  temporary password is logged; audit lines name user ids only.
+- **Sign-in lockout:** 5 failed attempts for one username from one IP within 15 minutes, or 30
+  from one IP, pause sign-in for that key with `429 too_many_attempts` and a `Retry-After`
+  header. The login page counts down. The counter lives in memory, so an API restart clears it.
+- **Cross-site requests:** state-changing requests (`POST`, `PATCH`, `DELETE`) with an `Origin`
+  that isn't in `MIMIC_CORS_ORIGINS` (or the API's own origin) get `403 origin_not_allowed`.
+  CORS uses credentials with an explicit origin list; `*` is refused.
+- Accounts hold a username and a role, nothing else (no email or name).
+- The cookie is scoped to the hostname, not the port, so other local servers on `localhost`
+  also receive it. That is fine for a local tool. To serve Mimic beyond localhost, put the web app
+  and the API on one site over HTTPS and set `MIMIC_COOKIE_SECURE=1`.
+
+Design and decisions: [`docs/PLAN-auth.md`](docs/PLAN-auth.md).
 
 ## How to use
 
@@ -140,7 +255,8 @@ Click **Analyze recording**. It usually takes 5–15 s. AI labeling can add up t
 ![Processing page with stage list](docs/screenshots/processing.png)
 
 The job page lists the pipeline stages with their live status. You can reload it or come back
-later with the same URL (`/jobs/<id>`). If the analysis fails, the page explains what went wrong
+later with the same URL (`/jobs/<id>`), or find it under **My jobs** (see
+[step 7](#7-find-and-delete-jobs)). If the analysis fails, the page explains what went wrong
 and what to try next (see [Troubleshooting](#troubleshooting)).
 
 ### 4. Read the result
@@ -197,6 +313,19 @@ Dark theme follows the OS (`prefers-color-scheme`):
 
 ![Result page, dark theme](docs/screenshots/result-dark.png)
 
+### 7. Find and delete jobs
+
+**My jobs** (`/jobs`) lists your analyses, newest first, with status, duration and whether AI
+labeling was on. Running jobs update by themselves. The trash button (also **Delete** on a job
+page) removes the recording, its result and keyframes for good, even while the job is running.
+
+![My jobs, as a regular user](docs/screenshots/jobs-user.png)
+
+Admins see **All jobs** with an **Owner** column and an owner filter (Everyone, Me, or one
+account). A job from before accounts that nobody owns shows as **Legacy**.
+
+![All jobs, as an admin, with owner column and filter](docs/screenshots/jobs-admin.png)
+
 ## AI labeling (optional)
 
 The backend is configured on the server only, in `.env`. The browser never sees keys or tokens.
@@ -220,15 +349,28 @@ The backend is configured on the server only, in `.env`. The browser never sees 
 
 Restart the API after you change `.env`.
 
-**Check the connection.** The upload page shows the interpreter mode, model and status. Click
-**Test connection** to run `POST /api/interpreter/check` from the API server:
+**Check the connection.** The upload page shows the interpreter mode, model and status to
+everyone who is signed in. Admins also get **Test connection**, which runs
+`POST /api/interpreter/check` from the API server (regular users get 403):
 
-![Interpreter status and Test connection result](docs/screenshots/interpreter-test-connection.png)
+![Interpreter status and Test connection result, as an admin](docs/screenshots/interpreter-test-connection.png)
+
+The API needs a session cookie, so sign in first. This reads the password without echoing it
+and keeps it out of your shell history and the process list (passwords that contain `"` or `\`
+need JSON escaping):
 
 ```bash
-curl -s -X POST http://localhost:8000/api/interpreter/check
+read -rs -p 'Password: ' PW; echo
+printf '{"username":"admin","password":"%s"}' "$PW" \
+  | curl -s -c mimic.cookies -H 'Content-Type: application/json' --data-binary @- \
+      http://localhost:8000/api/auth/login
+unset PW
+curl -s -b mimic.cookies -X POST http://localhost:8000/api/interpreter/check
 # {"mode":"claude_cli","ok":true,"latency_ms":86,"model":"sonnet",...,"error":null,...}
+curl -s -b mimic.cookies -X POST http://localhost:8000/api/auth/logout && rm mimic.cookies
 ```
+
+`mimic.cookies` holds a live session token until you sign out, so delete it afterwards.
 
 - `openai_compat`: calls `GET {base}/models`, then sends one tiny chat completion with a
   generated test image (never your data). It reports whether the model is listed, whether it
@@ -288,7 +430,42 @@ editing `docs/contract/sample-result.json`, run `pnpm -C web sync:fixture`.
 | `make lint` | `ruff check` + `ruff format --check` + ESLint |
 | `make contract` / `make contract-check` | Regenerate / verify `docs/contract/motion-spec.schema.json` + `web/lib/types.ts` |
 | `make synth` / `make eval` / `make calibrate` | Synthetic videos / accuracy suite / confidence calibration |
-| `make clean-jobs` | Delete all job data (uploads, artifacts, debug dumps, job DB) |
+| `make create-admin` | Create an admin; the first one takes over existing jobs. `USER=<name>`, `PASSWORD_STDIN=1` |
+| `make reset-password USER=<name>` | Break-glass password reset: sets a new password, re-enables the account, signs it out. `PASSWORD_STDIN=1` |
+| `make list-users` | List accounts: username, role, active, must-change, job count |
+| `make clean-jobs` | Delete all jobs (rows, uploads, artifacts, debug dumps). Accounts are kept |
+| `make reset-data` | Delete everything: job DB **including accounts** and `data/jobs/`. Run `make create-admin` again |
+
+## HTTP API
+
+The browser calls these directly (`NEXT_PUBLIC_API_BASE_URL`). Errors are always
+`{"error": {"code", "message"}}`. Interactive docs: http://localhost:8000/docs. "Session" means
+the `mimic_session` cookie from `POST /api/auth/login`.
+
+| Method & path | Who | What |
+|---|---|---|
+| `GET /api/health` | anyone | `status`, `version`, `ffmpeg`. `interpreter` and `limits` only with a session (else `null`) |
+| `GET /api/auth/status` | anyone | `{"setup_required": bool}` (no admin yet) |
+| `POST /api/auth/login` | anyone | `{username, password}` → the account + session cookie. `401 invalid_credentials`, `403 account_disabled`, `409 setup_required`, `429 too_many_attempts` |
+| `POST /api/auth/logout` | anyone | Ends the session (204) |
+| `GET /api/auth/me` | session | The signed-in account (`role`, `must_change_password`) |
+| `POST /api/auth/password` | session | `{current_password, new_password}`; signs out other sessions, sets a new cookie |
+| `POST /api/jobs` | user | Multipart upload (`file`, `pixel_ratio`, `use_interpreter`) → job id |
+| `GET /api/jobs` | user | Job list, newest first. `?owner=me\|<user id>` (other accounts: admins only), `?status=`, `?limit=` (1–200), `?cursor=` |
+| `GET /api/jobs/{id}` (`/result`, `/video`, `/keyframes/{name}`) | owner or admin | Status, result, preview video, keyframe images. Anyone else gets 404 |
+| `POST /api/jobs/{id}/interpret` | owner or admin | Re-run AI labeling on a finished job |
+| `DELETE /api/jobs/{id}` | owner or admin | Delete the job and its files (204), also while it runs |
+| `POST /api/interpreter/check` | admin | Test the configured interpreter |
+| `GET /api/admin/users`, `POST /api/admin/users` | admin | List accounts / create one (→ temporary password, shown once) |
+| `PATCH /api/admin/users/{id}` | admin | `{role?, is_active?}`. `409 last_admin`, `409 self_action_forbidden` |
+| `POST /api/admin/users/{id}/reset-password` | admin | New temporary password, forces a change at the next sign-in |
+| `DELETE /api/admin/users/{id}` | admin | Delete the account with all its jobs and files |
+
+"user" means any signed-in account whose password isn't waiting for a forced change; until it
+is changed, only `/api/auth/*` and the public part of `/api/health` work (everything else answers
+`403 password_change_required`). The full
+contract (models, every error code) is in [`docs/PLAN-auth.md`](docs/PLAN-auth.md) §3 and the
+generated [`web/lib/types.ts`](web/lib/types.ts).
 
 ## Debugging (`MIMIC_DEBUG`)
 
@@ -315,6 +492,15 @@ single file.
 | `missing required tool: ffmpeg` from `make setup`, `"ffmpeg": false` in `/api/health`, or a job fails with "ffprobe is not installed or not on PATH" | Install FFmpeg (`brew install ffmpeg`) or set `MIMIC_FFMPEG_BIN` / `MIMIC_FFPROBE_BIN`, then restart the API |
 | `address already in use` on :8000 / :3000 | Another process holds the port: `lsof -iTCP:8000 -sTCP:LISTEN`, then stop it, or run `uvicorn ... --port <n>` and set `NEXT_PUBLIC_API_BASE_URL` to match |
 | "Server unreachable" on the upload page | Start the API, check `NEXT_PUBLIC_API_BASE_URL`, and make sure `MIMIC_CORS_ORIGINS` includes the web origin |
+| Login page says **Setup required** / the API answers `setup_required` | No admin exists yet. Run `make create-admin` on the API host, then **Check again** |
+| Sign-in "doesn't stick", **Sign-in didn't stick**, **Hostnames don't match**, or "Server unreachable" naming two hostnames | The app and the API are on different hostnames (e.g. `127.0.0.1:3000` and `localhost:8000`). The cookie is per hostname, and the API only accepts origins in `MIMIC_CORS_ORIGINS`. Open the app on the hostname in `NEXT_PUBLIC_API_BASE_URL` (default: **http://localhost:3000**) |
+| `pnpm dev` opened on `http://127.0.0.1:3000` stays at "Checking your session…" | Next.js dev blocks its dev resources for other hostnames (log: "Blocked cross-origin request … from 127.0.0.1"), so the page never starts. Use `http://localhost:3000` |
+| **Too many failed attempts** with a countdown | 5 wrong passwords for one username (or 30 from one IP) within 15 min. Wait for the countdown, or restart the API (the counter is in memory) |
+| **Account disabled** | An admin disabled the account. Ask an admin to enable it (Users → Enable account) |
+| Forgot the admin password / every admin locked out | On the API host: `make reset-password USER=<admin>`. It sets a new password, re-enables the account and signs out its sessions |
+| Signed out while working ("Your session ended") | The session expired (12 h idle, 7 days max) or an admin disabled the account, reset its password or changed its role. Sign in again |
+| API refuses to start: `MIMIC_CORS_ORIGINS must list explicit origins` | Replace `*` with the real web origin(s), e.g. `http://localhost:3000` |
+| API refuses to start: `database schema vN is newer than this code` | The DB was migrated by a newer Mimic. Upgrade Mimic; downgrades aren't supported |
 | `too_long` / `too_short` | The clip is outside 0.5–15 s. Trim it to just the interaction, with about 1 s of stillness before it |
 | `no_motion_detected` | No UI change was found. Make sure the animation is on screen and finishes within the clip |
 | `no_stable_state` | The UI was already moving when recording started. Wait about 1 s before interacting |
@@ -342,16 +528,19 @@ recording ─► Layer A: measurement (FFmpeg + OpenCV, deterministic) ─► ev
 - Geometry is in CSS px: device pixels divided by the display scale.
 - Jobs run in-process with one worker. Job state is in SQLite and files are under
   `data/jobs/<id>/`.
+- Accounts and sessions live in the same SQLite file (schema versioned with
+  `PRAGMA user_version`, migrated at startup). Every job has an owner, enforced in the API; the
+  web app's route guard is only for navigation. Details: [`docs/PLAN-auth.md`](docs/PLAN-auth.md).
 
 ```
 api/    FastAPI backend + measurement pipeline (uv, Python 3.13)
 web/    Next.js 16 frontend (App Router, TypeScript, Tailwind, pnpm)
-docs/   PLAN.md (plan + phase notes), contract/ (API + IR schema, shared fixture), screenshots/
+docs/   PLAN.md (plan + phase notes), PLAN-auth.md (accounts), contract/ (API + IR schema, shared fixture), screenshots/
 data/   runtime data: jobs, job DB, synthetic videos (gitignored)
 ```
 
 More detail: [`PRD.md`](PRD.md) (product), [`docs/PLAN.md`](docs/PLAN.md) (architecture,
-algorithms, phase notes), [`docs/contract/`](docs/contract/) (JSON schema + sample result),
+algorithms, phase notes), [`docs/PLAN-auth.md`](docs/PLAN-auth.md) (accounts, sessions, authz), [`docs/contract/`](docs/contract/) (JSON schema + sample result),
 [`web/lib/README.md`](web/lib/README.md) (frontend data layer, mock mode).
 
 ## Known limitations

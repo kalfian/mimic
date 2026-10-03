@@ -1,4 +1,4 @@
-"""Shared fixtures: isolated data dir + settings, contract fixture loader."""
+"""Shared fixtures: isolated data dir + settings, contract fixture loader, fast scrypt."""
 
 from __future__ import annotations
 
@@ -10,10 +10,31 @@ from typing import Any
 
 import pytest
 
+from app.auth import policy as auth_policy
 from app.config import REPO_ROOT, Settings, get_settings
 
 CONTRACT_DIR: Path = REPO_ROOT / "docs" / "contract"
 SAMPLE_RESULT_PATH: Path = CONTRACT_DIR / "sample-result.json"
+
+
+#: scrypt cost used by tests (PLAN-auth §9): 2^10 instead of 2^15. Hashes encode their own
+#: parameters, so verification is unaffected.
+TEST_SCRYPT_LOG2_N = 10
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers", "real_scrypt: use the production scrypt cost (one test only; slow)"
+    )
+
+
+@pytest.fixture(autouse=True)
+def _fast_scrypt(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Lower the scrypt cost for every test unless it is marked ``real_scrypt``."""
+    if request.node.get_closest_marker("real_scrypt") is None:
+        monkeypatch.setattr(
+            auth_policy, "SCRYPT_PARAMS", auth_policy.ScryptParams(log2_n=TEST_SCRYPT_LOG2_N)
+        )
 
 
 def load_sample_result() -> dict[str, Any]:

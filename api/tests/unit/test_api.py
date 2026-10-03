@@ -1,5 +1,13 @@
 """HTTP API (Track A): upload validation codes, lifecycle with the real pipeline, artifacts,
 path traversal, pipeline failures, shutdown + startup recovery, health, interpreter check.
+
+Authorization (PLAN-auth B2): clients are authenticated through ``tests.auth_helpers.as_user``
+dependency overrides (no session cookie). ``make_client`` acts as an **admin** by default;
+``acting(client, user)`` switches the user for a block. Covered here: owner on create,
+``JobStatus.owner``, per-user visibility (404 for other users' and legacy jobs on status /
+result / video / keyframes / re-run / delete), ``GET /api/jobs`` (filters, cursor, 422s),
+``DELETE /api/jobs/{id}``, anonymous health subset and the admin-only interpreter check.
+The real-login matrix is ``test_authz_matrix.py`` (INT).
 """
 
 from __future__ import annotations
@@ -12,6 +20,8 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, ExitStack
+from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -26,11 +36,13 @@ from app.api.schemas import (
     ErrorBody,
     Health,
     JobCreated,
+    JobList,
     JobOptions,
     JobSource,
     JobStatus,
     ResultEnvelope,
 )
+from app.auth.models import Role, UserRecord
 from app.config import Settings, get_settings
 from app.core.errors import ErrorCode, PipelineError
 from app.core.jobstore import SqliteJobStore
@@ -38,6 +50,7 @@ from app.core.runner import JobContext, ProgressReporter
 from app.core.stages import JobState, Stage
 from app.core.storage import LocalJobStorage
 from app.main import create_app
+from tests.auth_helpers import as_user, make_user
 from tests.conftest import SAMPLE_RESULT_PATH
 from tests.unit.media_clips import build_clip_set, requires_ffmpeg
 
@@ -66,25 +79,58 @@ def reload_settings(monkeypatch: pytest.MonkeyPatch, **env: str) -> Settings:
 ClientFactory = Callable[..., TestClient]
 
 
+@dataclass(frozen=True, slots=True)
+class Accounts:
+    """Users in the test database (unusable passwords; requests go through ``as_user``)."""
+
+    admin: UserRecord
+    alice: UserRecord
+    bob: UserRecord
+    #: Active user with a pending forced password change (no full session).
+    newbie: UserRecord
+    #: Disabled user (behaves like a revoked session: 401).
+    disabled: UserRecord
+
+
 @pytest.fixture
-def make_client(settings: Settings) -> Iterator[ClientFactory]:
-    """``make_client(pipeline=None, settings_=None, reinterpret=None)`` -> started TestClient
-    (lifespan entered)."""
-    opened: list[TestClient] = []
+def accounts(settings: Settings) -> Accounts:
+    db_path = settings.db_path
+    return Accounts(
+        admin=make_user(db_path, "admin", Role.ADMIN),
+        alice=make_user(db_path, "alice"),
+        bob=make_user(db_path, "bob"),
+        newbie=make_user(db_path, "newbie", must_change=True),
+        disabled=make_user(db_path, "disabled", active=False),
+    )
 
-    def factory(
-        pipeline: Any = None, settings_: Settings | None = None, reinterpret: Any = None
-    ) -> TestClient:
-        client = TestClient(
-            create_app(settings_ or settings, pipeline=pipeline, reinterpret=reinterpret)
-        )
-        client.__enter__()
-        opened.append(client)
-        return client
 
-    yield factory
-    for c in opened:
-        c.__exit__(None, None, None)
+_ADMIN: Any = object()
+
+
+@pytest.fixture
+def make_client(settings: Settings, accounts: Accounts) -> Iterator[ClientFactory]:
+    """``make_client(pipeline=None, settings_=None, reinterpret=None, *, user=<admin>)`` ->
+    started TestClient (lifespan entered) whose requests are authenticated as ``user``
+    (``None`` = anonymous)."""
+    with ExitStack() as stack:
+
+        def factory(
+            pipeline: Any = None,
+            settings_: Settings | None = None,
+            reinterpret: Any = None,
+            *,
+            user: UserRecord | None = _ADMIN,
+        ) -> TestClient:
+            app = create_app(settings_ or settings, pipeline=pipeline, reinterpret=reinterpret)
+            stack.enter_context(as_user(app, accounts.admin if user is _ADMIN else user))
+            return stack.enter_context(TestClient(app))
+
+        yield factory
+
+
+def acting(client: TestClient, user: UserRecord | None) -> AbstractContextManager[None]:
+    """Requests made by ``client`` inside the block are authenticated as ``user``."""
+    return as_user(client.app, user)  # type: ignore[arg-type]
 
 
 def upload(
@@ -477,7 +523,9 @@ def test_unknown_and_malformed_job_ids(make_client: ClientFactory) -> None:
     for bad in ("nope", unknown.upper(), unknown[:-1] + "g", "..%2F..%2Fetc"):
         assert_error(client.get(f"/api/jobs/{bad}"), 404, ErrorCode.NOT_FOUND)
     assert_error(client.get("/api/nothing-here"), 404, ErrorCode.NOT_FOUND)
-    assert_error(client.delete(f"/api/jobs/{unknown}"), 405, ErrorCode.INVALID_REQUEST)
+    assert_error(client.delete(f"/api/jobs/{unknown}"), 404, ErrorCode.NOT_FOUND)
+    assert_error(client.delete("/api/jobs/nope"), 404, ErrorCode.NOT_FOUND)
+    assert_error(client.put(f"/api/jobs/{unknown}"), 405, ErrorCode.INVALID_REQUEST)
 
 
 def test_result_not_ready_then_ready(clips: dict[str, Path], make_client: ClientFactory) -> None:
@@ -592,8 +640,8 @@ def test_shutdown_interrupts_running_job(clips: dict[str, Path], settings: Setti
         while True:
             reporter.sleep(0.05)
 
-    client = TestClient(create_app(settings, pipeline=endless))
-    with client:
+    app = create_app(settings, pipeline=endless)
+    with as_user(app, make_user(settings.db_path, "admin", Role.ADMIN)), TestClient(app) as client:
         job_id = upload(client, clips["ok_mp4"]).json()["id"]
         assert started.wait(5)
     rec = SqliteJobStore(settings.db_path).get(job_id)
@@ -840,13 +888,16 @@ def test_recovery_restores_interrupted_rerun(
 # --------------------------------------------------------------------------------------------
 
 
-def test_cors_preflight(make_client: ClientFactory) -> None:
+@pytest.mark.parametrize("method", ["POST", "DELETE"])
+def test_cors_preflight(make_client: ClientFactory, method: str) -> None:
     resp = make_client(pipeline=fixture_pipeline).options(
-        "/api/jobs",
-        headers={"Origin": "http://localhost:3000", "Access-Control-Request-Method": "POST"},
+        "/api/jobs/" + uuid.uuid4().hex if method == "DELETE" else "/api/jobs",
+        headers={"Origin": "http://localhost:3000", "Access-Control-Request-Method": method},
     )
     assert resp.status_code == 200
     assert resp.headers["access-control-allow-origin"] == "http://localhost:3000"
+    assert resp.headers["access-control-allow-credentials"] == "true"  # cookie sessions (A8)
+    assert method in resp.headers["access-control-allow-methods"]
 
 
 def test_interpreter_check_returns_result(
@@ -899,3 +950,428 @@ def test_interpreter_check_real_module_mode_none(make_client: ClientFactory) -> 
     check = InterpreterCheck.model_validate(resp.json())
     assert (check.mode, check.ok) == ("none", False)
     assert check.error is not None and check.error.code == "not_configured"
+
+
+# --------------------------------------------------------------------------------------------
+# authorization (PLAN-auth B2: §3.3, §4, §14)
+# --------------------------------------------------------------------------------------------
+
+#: Read routes of one job (relative to ``/api/jobs/<id>``) whose files ``artifact_pipeline`` makes.
+JOB_READS = ("", "/result", "/video", "/keyframes/state_a.png")
+PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+
+
+def artifact_pipeline(ctx: JobContext, reporter: ProgressReporter) -> ResultEnvelope:
+    """``fixture_pipeline`` + a preview, one keyframe and ``measurement.json`` on disk, so every
+    job route has something to serve (and a re-run is possible)."""
+    env = fixture_pipeline(ctx, reporter)
+    storage = ctx.storage
+    # create_parents: a job deleted mid-run gets its dir re-created here (the A14 guard's case)
+    preview = storage.artifact_path(ctx.job_id, "preview.mp4", create_parents=True)
+    preview.write_bytes(b"\x00\x00\x00\x18ftypmp42")
+    kf = storage.artifact_path(ctx.job_id, "keyframes/state_a.png", create_parents=True)
+    kf.write_bytes(PNG_BYTES)
+    storage.write_json(ctx.job_id, "measurement.json", {"format": -1})
+    return env
+
+
+def upload_done(client: TestClient, clips: dict[str, Path]) -> str:
+    """Upload ``ok_mp4`` as the current user and wait for success. Returns the job id."""
+    resp = upload(client, clips["ok_mp4"])
+    assert resp.status_code == 202, resp.text
+    job_id = resp.json()["id"]
+    assert wait_terminal(client, job_id)["status"] == "succeeded"
+    return job_id
+
+
+def assert_job_readable(client: TestClient, job_id: str) -> None:
+    for path in JOB_READS:
+        resp = client.get(f"/api/jobs/{job_id}{path}")
+        assert resp.status_code == 200, (path, resp.text)
+
+
+def assert_job_hidden(client: TestClient, job_id: str) -> None:
+    """Every job route answers exactly like it would for an id that doesn't exist."""
+    unknown = uuid.uuid4().hex
+    for path in JOB_READS:
+        resp = client.get(f"/api/jobs/{job_id}{path}")
+        assert_error(resp, 404, ErrorCode.NOT_FOUND)
+        assert resp.json() == client.get(f"/api/jobs/{unknown}{path}").json(), path
+    assert_error(rerun(client, job_id), 404, ErrorCode.NOT_FOUND)
+    assert_error(client.delete(f"/api/jobs/{job_id}"), 404, ErrorCode.NOT_FOUND)
+
+
+def owner_of(user: UserRecord) -> dict[str, str]:
+    return {"id": user.id, "username": user.username}
+
+
+def test_owner_recorded_and_jobs_private_to_their_owner(
+    clips: dict[str, Path], make_client: ClientFactory, accounts: Accounts, settings: Settings
+) -> None:
+    client = make_client(pipeline=artifact_pipeline, reinterpret=fixture_pipeline)
+    with acting(client, accounts.alice):
+        job_id = upload_done(client, clips)
+        status = JobStatus.model_validate(client.get(f"/api/jobs/{job_id}").json())
+        assert status.owner is not None and status.owner.model_dump() == owner_of(accounts.alice)
+        assert_job_readable(client, job_id)
+
+    rec = SqliteJobStore(settings.db_path).get(job_id)
+    assert rec is not None and rec.owner_id == accounts.alice.id
+
+    with acting(client, accounts.bob):
+        assert_job_hidden(client, job_id)
+        assert client.get("/api/jobs").json() == {"items": [], "next_cursor": None}
+
+    # admin (the client's default user) sees and may use every job
+    assert client.get(f"/api/jobs/{job_id}").json()["owner"] == owner_of(accounts.alice)
+    assert_job_readable(client, job_id)
+    # bob's attempts changed nothing
+    storage = LocalJobStorage(settings.jobs_dir)
+    assert storage.exists(job_id, "result.json") and storage.exists(job_id, "preview.mp4")
+
+    # the owner may re-run labeling; so may an admin
+    with acting(client, accounts.alice):
+        resp = rerun(client, job_id)
+        assert resp.status_code == 202, resp.text
+        assert resp.json()["owner"] == owner_of(accounts.alice)
+        assert wait_terminal(client, job_id)["status"] == "succeeded"
+    assert rerun(client, job_id).status_code == 202
+    assert wait_terminal(client, job_id)["status"] == "succeeded"
+
+
+def test_admin_upload_is_owned_by_the_admin(
+    clips: dict[str, Path], make_client: ClientFactory, accounts: Accounts
+) -> None:
+    client = make_client(pipeline=fixture_pipeline)
+    job_id = upload_done(client, clips)
+    assert client.get(f"/api/jobs/{job_id}").json()["owner"] == owner_of(accounts.admin)
+    with acting(client, accounts.alice):
+        assert_job_hidden(client, job_id)
+
+
+def test_legacy_ownerless_job_is_admin_only(
+    make_client: ClientFactory, accounts: Accounts, settings: Settings
+) -> None:
+    store = SqliteJobStore(settings.db_path)
+    store.init()
+    job_id = uuid.uuid4().hex
+    store.create(job_id, original_filename="old.mp4", ext="mp4", options=JobOptions())
+    store.mark_succeeded(job_id)
+    data = json.loads(SAMPLE_RESULT_PATH.read_text(encoding="utf-8"))
+    data["job_id"] = data["spec"]["job_id"] = job_id
+    LocalJobStorage(settings.jobs_dir).write_json(job_id, "result.json", data)
+
+    client = make_client(pipeline=fixture_pipeline)
+    status = client.get(f"/api/jobs/{job_id}").json()
+    assert (status["status"], status["owner"]) == ("succeeded", None)
+    assert client.get(f"/api/jobs/{job_id}/result").status_code == 200
+    assert [j["id"] for j in client.get("/api/jobs").json()["items"]] == [job_id]
+    for user in (accounts.alice, accounts.bob):
+        with acting(client, user):
+            resp = client.get(f"/api/jobs/{job_id}")
+            assert_error(resp, 404, ErrorCode.NOT_FOUND)
+            assert_error(client.get(f"/api/jobs/{job_id}/result"), 404, ErrorCode.NOT_FOUND)
+            assert client.get("/api/jobs").json()["items"] == []
+
+
+#: Every protected job route: (method, path template, json body).
+PROTECTED_ROUTES: list[tuple[str, str, Any]] = [
+    ("POST", "/api/jobs", None),
+    ("GET", "/api/jobs", None),
+    ("GET", "/api/jobs/{id}", None),
+    ("GET", "/api/jobs/{id}/result", None),
+    ("GET", "/api/jobs/{id}/video", None),
+    ("GET", "/api/jobs/{id}/keyframes/state_a.png", None),
+    ("POST", "/api/jobs/{id}/interpret", {"use_interpreter": True}),
+    ("DELETE", "/api/jobs/{id}", None),
+    ("POST", "/api/interpreter/check", None),
+]
+
+
+@pytest.mark.parametrize(
+    ("who", "status", "code"),
+    [
+        ("anonymous", 401, ErrorCode.UNAUTHENTICATED),
+        ("disabled", 401, ErrorCode.UNAUTHENTICATED),
+        ("newbie", 403, ErrorCode.PASSWORD_CHANGE_REQUIRED),
+    ],
+)
+def test_protected_routes_need_a_full_session(
+    clips: dict[str, Path],
+    make_client: ClientFactory,
+    accounts: Accounts,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    who: str,
+    status: int,
+    code: ErrorCode,
+) -> None:
+    def must_not_run(_: Settings) -> Any:
+        raise AssertionError("interpreter check must not run")
+
+    monkeypatch.setattr(routes_interpreter, "check_interpreter", must_not_run)
+    client = make_client(pipeline=artifact_pipeline)
+    job_id = upload_done(client, clips)  # an admin-owned job with every artifact
+    user = None if who == "anonymous" else getattr(accounts, who)
+    with acting(client, user):
+        for method, template, body in PROTECTED_ROUTES:
+            # auth runs before the job lookup: a malformed id is still 401/403, not 404
+            for jid in (job_id, "nope"):
+                resp = client.request(method, template.format(id=jid), json=body)
+                assert_error(resp, status, code)
+        # an upload is rejected before anything is stored
+        assert_error(upload(client, clips["ok_mp4"]), status, code)
+    assert [j["id"] for j in client.get("/api/jobs").json()["items"]] == [job_id]
+    assert LocalJobStorage(settings.jobs_dir).job_ids() == [job_id]
+
+
+# ---- GET /api/jobs -----------------------------------------------------------------------------
+
+
+def _seed_jobs(settings: Settings, accounts: Accounts) -> dict[str, list[str]]:
+    """3 jobs of alice (the middle one succeeded), 1 of bob, 1 legacy. Ids newest first."""
+    store = SqliteJobStore(settings.db_path)
+    store.init()
+    seeded: dict[str, list[str]] = {"alice": [], "bob": [], "legacy": [], "all": []}
+    for who, owner in (
+        ("alice", accounts.alice.id),
+        ("legacy", None),
+        ("alice", accounts.alice.id),
+        ("bob", accounts.bob.id),
+        ("alice", accounts.alice.id),
+    ):
+        job_id = uuid.uuid4().hex
+        store.create(
+            job_id, original_filename="clip.mp4", ext="mp4", options=JobOptions(), owner_id=owner
+        )
+        seeded[who].insert(0, job_id)
+        seeded["all"].insert(0, job_id)
+    store.mark_succeeded(seeded["alice"][1])
+    return seeded
+
+
+def _ids(resp: Any) -> list[str]:
+    assert resp.status_code == 200, resp.text
+    return [j.id for j in JobList.model_validate(resp.json()).items]
+
+
+def test_job_list_visibility_and_filters(
+    make_client: ClientFactory, accounts: Accounts, settings: Settings
+) -> None:
+    seeded = _seed_jobs(settings, accounts)
+    client = make_client(pipeline=fixture_pipeline)  # recovery: queued jobs without input fail
+
+    # admin: everything incl. legacy, newest first, owner filled
+    body = JobList.model_validate(client.get("/api/jobs").json())
+    assert [j.id for j in body.items] == seeded["all"] and body.next_cursor is None
+    owners = {j.id: (j.owner.username if j.owner else None) for j in body.items}
+    assert owners[seeded["bob"][0]] == "bob" and owners[seeded["legacy"][0]] is None
+    assert _ids(client.get("/api/jobs", params={"owner": accounts.alice.id})) == seeded["alice"]
+    assert _ids(client.get("/api/jobs", params={"owner": accounts.bob.id})) == seeded["bob"]
+    assert _ids(client.get("/api/jobs", params={"owner": "me"})) == []
+    assert _ids(client.get("/api/jobs", params={"owner": uuid.uuid4().hex})) == []
+    assert _ids(client.get("/api/jobs", params={"status": "succeeded"})) == [seeded["alice"][1]]
+    assert _ids(
+        client.get("/api/jobs", params={"owner": accounts.alice.id, "status": "failed"})
+    ) == [seeded["alice"][0], seeded["alice"][2]]
+
+    with acting(client, accounts.alice):
+        assert _ids(client.get("/api/jobs")) == seeded["alice"]
+        assert _ids(client.get("/api/jobs", params={"owner": "me"})) == seeded["alice"]
+        assert _ids(client.get("/api/jobs", params={"owner": accounts.alice.id})) == seeded["alice"]
+        assert _ids(client.get("/api/jobs", params={"status": "succeeded"})) == [seeded["alice"][1]]
+        for other in (accounts.bob.id, accounts.admin.id, uuid.uuid4().hex):
+            resp = client.get("/api/jobs", params={"owner": other})
+            assert_error(resp, 403, ErrorCode.FORBIDDEN)
+        items = client.get("/api/jobs").json()["items"]
+        assert {i["owner"]["username"] for i in items} == {"alice"}
+
+    with acting(client, accounts.bob):
+        assert _ids(client.get("/api/jobs")) == seeded["bob"]
+
+
+def test_job_list_cursor_pagination(
+    make_client: ClientFactory, accounts: Accounts, settings: Settings
+) -> None:
+    seeded = _seed_jobs(settings, accounts)
+    client = make_client(pipeline=fixture_pipeline)
+    for limit in (1, 2, 4):
+        seen: list[str] = []
+        cursor: str | None = None
+        pages = 0
+        while True:
+            params: dict[str, Any] = {"limit": limit}
+            if cursor is not None:
+                params["cursor"] = cursor
+            body = JobList.model_validate(client.get("/api/jobs", params=params).json())
+            assert len(body.items) <= limit
+            seen += [j.id for j in body.items]
+            pages += 1
+            cursor = body.next_cursor
+            if cursor is None:
+                break
+        assert seen == seeded["all"], limit
+        assert pages == -(-len(seeded["all"]) // limit)
+    # a non-admin's cursor stays within their own jobs
+    with acting(client, accounts.alice):
+        first = client.get("/api/jobs", params={"limit": 2}).json()
+        rest = client.get("/api/jobs", params={"limit": 2, "cursor": first["next_cursor"]})
+        assert [j["id"] for j in first["items"]] + _ids(rest) == seeded["alice"]
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"limit": "0"},
+        {"limit": "201"},
+        {"limit": "x"},
+        {"status": "bogus"},
+        {"owner": "nope"},
+        {"owner": "ME!"},
+        {"cursor": "!!!"},
+        {"cursor": "bm90LWEtY3Vyc29y"},  # urlsafe-b64 of "not-a-cursor"
+        {"cursor": "eHw" + "y" * 600},  # longer than the max length
+    ],
+)
+def test_job_list_invalid_query_is_422(
+    make_client: ClientFactory, accounts: Accounts, params: dict[str, str]
+) -> None:
+    client = make_client(pipeline=fixture_pipeline)
+    assert_error(client.get("/api/jobs", params=params), 422, ErrorCode.INVALID_REQUEST)
+    with acting(client, accounts.alice):
+        assert_error(client.get("/api/jobs", params=params), 422, ErrorCode.INVALID_REQUEST)
+
+
+def test_job_list_store_value_error_is_422(
+    make_client: ClientFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``list_jobs`` raising ``ValueError`` (e.g. a limit the store rejects) is 422, not 500."""
+    client = make_client(pipeline=fixture_pipeline)
+    store = client.app.state.services.store  # type: ignore[attr-defined]
+
+    def reject(**_: Any) -> Any:
+        raise ValueError("limit must be in 1..200")
+
+    monkeypatch.setattr(store, "list_jobs", reject)
+    body = assert_error(client.get("/api/jobs"), 422, ErrorCode.INVALID_REQUEST)
+    assert "limit" in body.error.message
+
+
+# ---- DELETE /api/jobs/{id} ---------------------------------------------------------------------
+
+
+def test_owner_deletes_own_job(
+    clips: dict[str, Path],
+    make_client: ClientFactory,
+    accounts: Accounts,
+    settings: Settings,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    client = make_client(pipeline=artifact_pipeline)
+    with acting(client, accounts.alice):
+        job_id = upload_done(client, clips)
+        keep = upload_done(client, clips)
+        with caplog.at_level(logging.INFO, logger="app"):
+            resp = client.delete(f"/api/jobs/{job_id}")
+        assert resp.status_code == 204 and resp.content == b""
+        assert f"user {accounts.alice.id} deleted job {job_id}" in caplog.text
+        for path in JOB_READS:
+            assert_error(client.get(f"/api/jobs/{job_id}{path}"), 404, ErrorCode.NOT_FOUND)
+        assert_error(client.delete(f"/api/jobs/{job_id}"), 404, ErrorCode.NOT_FOUND)
+        assert _ids(client.get("/api/jobs")) == [keep]
+    assert SqliteJobStore(settings.db_path).get(job_id) is None
+    assert LocalJobStorage(settings.jobs_dir).job_ids() == [keep]
+
+
+def test_other_user_cannot_delete_admin_can(
+    clips: dict[str, Path], make_client: ClientFactory, accounts: Accounts, settings: Settings
+) -> None:
+    client = make_client(pipeline=artifact_pipeline)
+    storage = LocalJobStorage(settings.jobs_dir)
+    with acting(client, accounts.alice):
+        job_id = upload_done(client, clips)
+    with acting(client, accounts.bob):
+        assert_error(client.delete(f"/api/jobs/{job_id}"), 404, ErrorCode.NOT_FOUND)
+    assert storage.exists(job_id, "result.json") and storage.exists(job_id, "preview.mp4")
+    with acting(client, accounts.alice):
+        assert_job_readable(client, job_id)
+
+    assert client.delete(f"/api/jobs/{job_id}").status_code == 204  # admin
+    assert not storage.exists(job_id)
+    with acting(client, accounts.alice):
+        assert_error(client.get(f"/api/jobs/{job_id}"), 404, ErrorCode.NOT_FOUND)
+
+
+def test_delete_running_job_leaves_no_files(
+    clips: dict[str, Path], make_client: ClientFactory, accounts: Accounts, settings: Settings
+) -> None:
+    """§14 / A14: the job is deleted mid-run; the pipeline then writes artifacts (re-creating the
+    dir) and returns. The runner must not resurrect the row or leave the dir behind."""
+    assert settings.workers == 1  # the second job below runs only after the first one finished
+    started, release = threading.Event(), threading.Event()
+
+    def blocking(ctx: JobContext, reporter: ProgressReporter) -> ResultEnvelope:
+        if not release.is_set():
+            reporter.enter(Stage.MEASURING, 0.5)
+            started.set()
+            assert release.wait(10)
+            reporter.update(0.9)  # a progress write to the deleted row: a no-op
+        return artifact_pipeline(ctx, reporter)
+
+    client = make_client(pipeline=blocking)
+    storage = LocalJobStorage(settings.jobs_dir)
+    with acting(client, accounts.alice):
+        job_id = upload(client, clips["ok_mp4"]).json()["id"]
+        assert started.wait(10)
+        assert client.get(f"/api/jobs/{job_id}").json()["status"] == "processing"
+        assert client.delete(f"/api/jobs/{job_id}").status_code == 204
+        assert not storage.exists(job_id)
+        release.set()
+        after = upload_done(client, clips)  # queued behind the deleted job
+        assert_error(client.get(f"/api/jobs/{job_id}"), 404, ErrorCode.NOT_FOUND)
+        assert _ids(client.get("/api/jobs")) == [after]
+    assert SqliteJobStore(settings.db_path).get(job_id) is None
+    assert storage.job_ids() == [after]
+
+
+# ---- health + interpreter check ----------------------------------------------------------------
+
+
+def test_health_anonymous_gets_public_subset(
+    make_client: ClientFactory, accounts: Accounts
+) -> None:
+    client = make_client(user=None)
+    for user in (None, accounts.newbie, accounts.disabled):
+        with acting(client, user):
+            resp = client.get("/api/health")
+            assert resp.status_code == 200, resp.text
+            body = resp.json()
+            assert body == {
+                "status": "ok",
+                "version": body["version"],
+                "ffmpeg": True,
+                "interpreter": None,
+                "limits": None,
+            }
+            assert body["version"]
+    for user in (accounts.alice, accounts.admin):
+        with acting(client, user):
+            full = Health.model_validate(client.get("/api/health").json())
+            assert full.interpreter is not None and full.interpreter.mode == "none"
+            assert full.limits is not None and full.limits.max_upload_mb > 0
+
+
+def test_interpreter_check_is_admin_only(
+    monkeypatch: pytest.MonkeyPatch, make_client: ClientFactory, accounts: Accounts
+) -> None:
+    calls: list[Settings] = []
+    monkeypatch.setattr(
+        routes_interpreter, "check_interpreter", lambda s: calls.append(s) or {"ok": True}
+    )
+    client = make_client(pipeline=fixture_pipeline)
+    for user in (accounts.alice, accounts.bob):
+        with acting(client, user):
+            assert_error(client.post("/api/interpreter/check"), 403, ErrorCode.FORBIDDEN)
+    assert calls == []
+    assert client.post("/api/interpreter/check").status_code == 200  # admin
+    assert len(calls) == 1

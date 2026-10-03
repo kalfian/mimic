@@ -1,4 +1,10 @@
-"""Request-scoped access to the process services created in ``app.main``'s lifespan."""
+"""Request-scoped access to the process services created in ``app.main``'s lifespan.
+
+``get_job`` (``JobDep``) is the single choke point for every job-by-id route, so it is also where
+job visibility is enforced (PLAN-auth U3, A10): it requires a full session (``CurrentUserDep``:
+401 / 403 ``password_change_required``) and answers **404** ``not_found`` for a job the user may
+not see, exactly like an unknown id, so existence never leaks.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +13,8 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
+from app.auth.deps import CurrentUserDep
+from app.auth.policy import can_access_job
 from app.config import Settings
 from app.core.errors import ErrorCode, PipelineError
 from app.core.jobstore import JobRecord, JobStore
@@ -32,12 +40,17 @@ def get_services(request: Request) -> Services:
 ServicesDep = Annotated[Services, Depends(get_services)]
 
 
-def get_job(job_id: str, services: ServicesDep) -> JobRecord:
-    """Path param ``job_id`` -> record. Malformed and unknown ids are both ``not_found``."""
+def get_job(job_id: str, services: ServicesDep, user: CurrentUserDep) -> JobRecord:
+    """Path param ``job_id`` -> record the current user may see.
+
+    Malformed ids, unknown ids and jobs of other users (or legacy ownerless jobs, for non-admins)
+    are all ``not_found``. Authentication runs first (dependencies resolve before this body), so
+    an anonymous caller gets 401 even for a malformed id.
+    """
     if not is_valid_job_id(job_id):
         raise PipelineError(ErrorCode.NOT_FOUND)
     record = services.store.get(job_id)
-    if record is None:
+    if record is None or not can_access_job(user, record.owner_id):
         raise PipelineError(ErrorCode.NOT_FOUND)
     return record
 

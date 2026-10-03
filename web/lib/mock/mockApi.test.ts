@@ -18,8 +18,10 @@ import {
   mockUploadVideo,
   readMockScenarioFromLocation,
   resetMock,
+  resetMockData,
   type MockScenario,
 } from "./mockApi";
+import { mockSignInAs } from "./mockAuth";
 
 const client: JobClient = { getJob: mockGetJob, getResult: mockGetResult };
 const fast = { intervalMs: 5, slowIntervalMs: 10, backoffBaseMs: 5, backoffMaxMs: 20 };
@@ -36,7 +38,8 @@ async function runScenario(scenario: MockScenario, useInterpreter = false) {
 }
 
 beforeEach(() => {
-  resetMock();
+  resetMockData();
+  mockSignInAs("admin"); // job routes need a session; admin also may run the interpreter check
   configureMock({ timeScale: 0.01, latencyMs: 20 });
 });
 

@@ -49,7 +49,11 @@ function unavailableReason(mode: InterpreterMode): string {
 
 const yesNo = (v: boolean | null) => (v == null ? "not checked" : v ? "yes" : "no");
 
-export function InterpreterStatus({ health, check }: { health: UseHealthResult; check: UseInterpreterCheckResult }) {
+/**
+ * Server interpreter status. `canTest` (admins only, PLAN-auth U4) adds "Test connection"; users
+ * get the same read-only status without it.
+ */
+export function InterpreterStatus({ health, check, canTest }: { health: UseHealthResult; check: UseInterpreterCheckResult; canTest: boolean }) {
   if (health.isLoading) {
     return (
       <div className="rounded-md border border-line px-4 py-3 text-sm text-ink-3" role="status">
@@ -75,6 +79,8 @@ export function InterpreterStatus({ health, check }: { health: UseHealthResult; 
     );
   }
 
+  // Null for anonymous callers (PLAN-auth A12); signed-in pages always get the full health.
+  if (!health.health.interpreter) return null;
   const { mode, available, model } = health.health.interpreter;
   const result = check.check;
 
@@ -101,32 +107,38 @@ export function InterpreterStatus({ health, check }: { health: UseHealthResult; 
         </dd>
       </dl>
 
-      <div className="flex flex-wrap items-center gap-3 border-t border-line px-4 py-3">
-        <Button size="sm" onClick={() => void check.run()} loading={check.isChecking}>
-          {check.isChecking ? "Testing…" : result ? "Test again" : "Test connection"}
-        </Button>
-        <span className="text-xs text-ink-3">
-          {check.isChecking ? "Sends one tiny test request from the server. Can take a few seconds." : "Runs from the API server; nothing from your recording is sent."}
-        </span>
-      </div>
+      {canTest ? (
+        <>
+          <div className="flex flex-wrap items-center gap-3 border-t border-line px-4 py-3">
+            <Button size="sm" onClick={() => void check.run()} loading={check.isChecking}>
+              {check.isChecking ? "Testing…" : result ? "Test again" : "Test connection"}
+            </Button>
+            <span className="text-xs text-ink-3">
+              {check.isChecking
+                ? "Sends one tiny test request from the server. Can take a few seconds."
+                : "Runs from the API server; nothing from your recording is sent."}
+            </span>
+          </div>
 
-      <div aria-live="polite">
-        {check.error ? (
-          <CheckFailure title="Could not run the check" message={describeError(check.error.code, check.error.message).message} />
-        ) : result && !check.isChecking ? (
-          result.ok ? (
-            <CheckSuccess check={result} />
-          ) : (
-            <CheckFailure
-              title={result.error ? INTERPRETER_CHECK_ERROR_MESSAGES[result.error.code] : "Connection check failed."}
-              code={result.error?.code}
-              message={result.error?.message}
-              guidance={result.error ? guidanceFor(result.error.code, result.mode) : undefined}
-              check={result}
-            />
-          )
-        ) : null}
-      </div>
+          <div aria-live="polite">
+            {check.error ? (
+              <CheckFailure title="Could not run the check" message={describeError(check.error.code, check.error.message).message} />
+            ) : result && !check.isChecking ? (
+              result.ok ? (
+                <CheckSuccess check={result} />
+              ) : (
+                <CheckFailure
+                  title={result.error ? INTERPRETER_CHECK_ERROR_MESSAGES[result.error.code] : "Connection check failed."}
+                  code={result.error?.code}
+                  message={result.error?.message}
+                  guidance={result.error ? guidanceFor(result.error.code, result.mode) : undefined}
+                  check={result}
+                />
+              )
+            ) : null}
+          </div>
+        </>
+      ) : null}
 
       <p className="border-t border-line px-4 py-2.5 text-xs text-ink-3">
         Configured through the API server’s environment. This page never asks for, stores or sends API keys.

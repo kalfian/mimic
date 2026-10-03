@@ -131,3 +131,71 @@ export const IconMark = (p: IconProps) => (
     <path d="M9 12.5c2 0 2.5-3 2.5-3" />
   </Svg>
 );
+
+export const IconChevronDown = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4.5 6.5L8 10l3.5-3.5" />
+  </Svg>
+);
+
+/** Row actions trigger (three dots). */
+export const IconMore = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3.5 8h.01M8 8h.01M12.5 8h.01" strokeWidth={2.25} />
+  </Svg>
+);
+
+export const IconTrash = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M2.5 4.5h11M6.5 4.5V3a.5.5 0 01.5-.5h2a.5.5 0 01.5.5v1.5" />
+    <path d="M4 4.5l.6 8.1a1 1 0 001 .9h4.8a1 1 0 001-.9l.6-8.1" />
+  </Svg>
+);
+
+export const IconEye = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" />
+    <circle cx="8" cy="8" r="2" />
+  </Svg>
+);
+
+export const IconEyeOff = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6.2 3.8A6.6 6.6 0 018 3.5c4 0 6.5 4.5 6.5 4.5a11 11 0 01-1.7 2.2M10.1 12.1A6.4 6.4 0 018 12.5C4 12.5 1.5 8 1.5 8a11.2 11.2 0 012.6-3" />
+    <path d="M6.6 6.6a2 2 0 002.8 2.8M2 2l12 12" />
+  </Svg>
+);
+
+export const IconLock = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3" y="7" width="10" height="7" rx="1.5" />
+    <path d="M5.5 7V5a2.5 2.5 0 015 0v2" />
+  </Svg>
+);
+
+export const IconSignOut = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6.5 13.5h-3a1 1 0 01-1-1v-9a1 1 0 011-1h3" />
+    <path d="M10.5 11L13.5 8l-3-3M13.5 8H6" />
+  </Svg>
+);
+
+export const IconPlus = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M8 3v10M3 8h10" />
+  </Svg>
+);
+
+export const IconTerminal = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+    <path d="M4.5 6l2 2-2 2M8.5 10.5h3" />
+  </Svg>
+);
+
+export const IconUser = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="8" cy="5.5" r="2.5" />
+    <path d="M3 13.5c.6-2.3 2.6-3.5 5-3.5s4.4 1.2 5 3.5" />
+  </Svg>
+);

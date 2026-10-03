@@ -9,6 +9,7 @@ import { RecordingGuidelines } from "@/components/upload/RecordingGuidelines";
 import { UploadDropzone, type SelectedFile } from "@/components/upload/UploadDropzone";
 import { UploadOptions } from "@/components/upload/UploadOptions";
 import { DEFAULT_UPLOAD_OPTIONS, IS_MOCK_API, type UploadOptions as Options } from "@/lib/api";
+import { isAdminSession, useSession } from "@/lib/session";
 import { checkVideoDuration, checkVideoFile, limitsFromHealth, probeVideoDuration } from "@/lib/upload";
 import { useHealth, useInterpreterCheck } from "@/lib/useHealth";
 import { useVideoUpload } from "@/lib/useVideoUpload";
@@ -21,12 +22,13 @@ export function UploadScreen() {
   const health = useHealth();
   const check = useInterpreterCheck();
   const upload = useVideoUpload();
+  const isAdmin = isAdminSession(useSession());
 
   const [selected, setSelected] = useState<SelectedFile | null>(null);
   const [options, setOptions] = useState<Options>({ ...DEFAULT_UPLOAD_OPTIONS });
   const probeToken = useRef(0);
 
-  const aiAvailable = health.health?.interpreter.available === true;
+  const aiAvailable = health.health?.interpreter?.available === true;
   const limits = limitsFromHealth(health.health);
   const busy = upload.state === "uploading" || upload.state === "done";
   const canSubmit = Boolean(selected?.check.ok) && !selected?.probing && !busy;
@@ -91,7 +93,7 @@ export function UploadScreen() {
           </div>
         </section>
 
-        <UploadOptions options={options} onChange={setOptions} health={health} check={check} disabled={busy} />
+        <UploadOptions options={options} onChange={setOptions} health={health} check={check} disabled={busy} canTestInterpreter={isAdmin} />
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-line pt-6">
           <Button type="submit" variant="primary" disabled={!canSubmit} loading={upload.state === "uploading"}>

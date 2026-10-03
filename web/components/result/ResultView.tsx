@@ -21,12 +21,18 @@ export function ResultView({
   result,
   labelAction = null,
   relabeled = false,
+  owner = null,
+  actions = null,
 }: {
   result: ResultEnvelope;
   /** "Label with AI" flow, rendered inside the notes about heuristic labels. */
   labelAction?: ReactNode;
   /** A relabel just finished with AI labels: confirm it next to the status line. */
   relabeled?: boolean;
+  /** "Owner: alice" line (admins viewing another account's job). */
+  owner?: ReactNode;
+  /** Job-level actions (delete), next to the format links. */
+  actions?: ReactNode;
 }) {
   const { spec, outputs, artifacts } = result;
   const { source, interaction, interpretation } = spec;
@@ -58,6 +64,7 @@ export function ResultView({
             <span className="font-sans"> · {INTERPRETATION_STATUS_LABELS[interpretation.status]}</span>
             {interpretation.status === "ok" && interpretation.model ? ` (${interpretation.model})` : ""}
           </p>
+          {owner}
           <p ref={relabeledRef} tabIndex={-1} className="inline-flex items-center gap-1.5 rounded-sm text-xs text-ok outline-none" role="status">
             {relabeled ? (
               <>
@@ -69,9 +76,12 @@ export function ResultView({
         </div>
         <div className="flex flex-col items-start gap-1.5 sm:items-end">
           <CopyButton text={outputs.llm_prompt} label="Copy LLM prompt" variant="primary" size="md" />
-          <a href="#spec" className="focus-ring rounded-sm text-xs text-ink-3 underline-offset-4 hover:text-ink hover:underline">
-            All formats: technical, JSON, CSS
-          </a>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 sm:justify-end">
+            <a href="#spec" className="focus-ring rounded-sm text-xs text-ink-3 underline-offset-4 hover:text-ink hover:underline">
+              All formats: technical, JSON, CSS
+            </a>
+            {actions}
+          </div>
         </div>
       </header>
 

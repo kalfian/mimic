@@ -28,6 +28,7 @@ from typing import Any
 from pydantic.json_schema import models_json_schema
 
 from app.api import schemas as api_schemas
+from app.auth import policy as auth_policy
 from app.config import REPO_ROOT
 from app.core.stages import STAGE_LABELS, STAGE_ORDER, STAGE_WINDOWS
 from app.models import ir
@@ -64,6 +65,7 @@ NAMED_LITERALS: tuple[tuple[str, Any], ...] = (
     ("WarningCode", ir.WarningCode),
     ("PixelRatioOption", api_schemas.PixelRatioOption),
     ("KeyframeKind", api_schemas.KeyframeKind),
+    ("UserRole", api_schemas.UserRole),
 )
 
 #: The discriminated ``Value`` union is emitted as ``Value`` instead of inline.
@@ -76,9 +78,14 @@ VALUE_UNION_REFS = frozenset({"PxValue", "RatioValue", "ColorValue", "ShadowValu
 
 
 def build_schema() -> dict[str, Any]:
-    """JSON Schema for every contract model (serialization mode), defs sorted by name."""
+    """JSON Schema for every contract model, defs sorted by name.
+
+    Response models use serialization mode; request bodies (``CONTRACT_REQUEST_MODELS``) use
+    validation mode so fields with a server-side default are optional.
+    """
     _, defs_doc = models_json_schema(
-        [(m, "serialization") for m in api_schemas.CONTRACT_MODELS],
+        [(m, "serialization") for m in api_schemas.CONTRACT_MODELS]
+        + [(m, "validation") for m in api_schemas.CONTRACT_REQUEST_MODELS],
         ref_template="#/$defs/{model}",
     )
     defs = defs_doc["$defs"]
@@ -274,6 +281,12 @@ def _ts_constants() -> list[str]:
         f"export const BAND_MEDIUM_MIN = {ir.BAND_MEDIUM_MIN};",
         "/** Transitions with overall confidence below this are 'uncertain observations'. */",
         f"export const UNCERTAIN_BELOW = {ir.UNCERTAIN_BELOW};",
+        "",
+        "/** Password length bounds (characters after NFKC normalization, app/auth/policy.py). */",
+        f"export const PASSWORD_MIN_LENGTH = {auth_policy.PASSWORD_MIN_LENGTH};",
+        f"export const PASSWORD_MAX_LENGTH = {auth_policy.PASSWORD_MAX_LENGTH};",
+        "/** Username rule (lowercase; app/auth/policy.py). Use with `new RegExp(...)`. */",
+        f"export const USERNAME_PATTERN = {_lit(auth_policy.USERNAME_PATTERN)};",
     ]
 
 

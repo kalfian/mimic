@@ -1214,3 +1214,14 @@ max |Δ| 0.001); `make contract-check`, `make lint` clean; web typecheck / lint 
 - Real recordings are still untested (none provided); live `openai_compat` (9Router) not run.
 - Optional Playwright realism tier (Q2) not started (post-MVP).
 
+
+## Auth addendum (2026-10-03)
+
+User accounts, server-side sessions and per-owner job visibility were added after the MVP. The
+plan, decisions (A1–A18), API contract, authz matrix and the P0/P3 notes are in
+[`PLAN-auth.md`](PLAN-auth.md). Nothing above is reopened; what changed for this plan:
+`data/mimic.db` is schema-versioned (v1 adds `users`, `sessions`, `jobs.owner_id`) and migrated
+at startup with a backup; every job route needs a session (other users' jobs answer 404);
+`POST /api/interpreter/check` is admin-only; `GET /api/health` returns `interpreter`/`limits`
+only to signed-in callers; `make clean-jobs` keeps accounts and `make reset-data` wipes
+everything. The pipeline, `scripts/analyze.py` and the synth eval don't touch auth.

@@ -6,7 +6,7 @@
  * opacity nearest 0.05; ms rounded to 10 when shown as "~".
  */
 
-import type { ApiErrorCode } from "./errors";
+import type { ApiError, ApiErrorCode } from "./errors";
 import type { InterpreterCheck, InterpreterCheckErrorCode, InterpreterMode, StructuredOutputMode } from "./api";
 import type {
   Confidence,
@@ -25,10 +25,11 @@ import type {
   Shadow,
   Stage,
   TriggerKind,
+  UserRole,
   Value,
   WarningCode,
 } from "./types";
-import { BAND_HIGH_MIN, BAND_MEDIUM_MIN, STAGE_LABELS, STAGE_ORDER, UNCERTAIN_BELOW } from "./types";
+import { BAND_HIGH_MIN, BAND_MEDIUM_MIN, PASSWORD_MIN_LENGTH, STAGE_LABELS, STAGE_ORDER, UNCERTAIN_BELOW } from "./types";
 
 /* ---------- numbers ---------- */
 
@@ -382,6 +383,10 @@ export function formatInterpreterCheck(check: InterpreterCheck): string {
 
 /* ---------- errors ---------- */
 
+/** The CLI command that creates the first admin (shown by the setup-required state). */
+export const SETUP_COMMAND = "make create-admin";
+
+
 export interface ErrorDescription {
   title: string;
   message: string;
@@ -453,18 +458,72 @@ const ERROR_DESCRIPTIONS: Record<ApiErrorCode, ErrorDescription> = {
   },
   interrupted: { title: "Processing interrupted", message: "The server restarted while processing this recording.", guidance: ["Upload the video again."] },
   not_found: {
-    title: "Analysis not found",
-    message: "This analysis does not exist; it may have been deleted.",
-    guidance: ["Upload the video again."],
+    title: "Not found",
+    message: "This doesn't exist, or you don't have access to it.",
+    guidance: ["It may have been deleted. Check the link, or upload the video again."],
   },
   not_ready: { title: "Result not ready", message: "The result is not ready yet.", guidance: ["Wait until processing has finished."] },
   already_running: { title: "Still processing", message: "This analysis is still running.", guidance: ["Wait until it finishes, then try again."] },
+  unauthenticated: {
+    title: "Signed out",
+    message: "You are not signed in, or your session expired.",
+    guidance: ["Sign in again."],
+  },
+  invalid_credentials: { title: "Sign-in failed", message: "Wrong username or password.", guidance: ["Check the username and password, then try again."] },
+  account_disabled: { title: "Account disabled", message: "This account is disabled.", guidance: ["Ask an admin to enable it."] },
+  forbidden: { title: "Not allowed", message: "You don't have permission to do this.", guidance: ["Ask an admin if you need access."] },
+  password_change_required: {
+    title: "New password needed",
+    message: "Set a new password before continuing.",
+    guidance: ["Choose a new password to continue."],
+  },
+  origin_not_allowed: {
+    title: "Request blocked",
+    message: "This page is not allowed to use the API.",
+    guidance: ["Open the app from an address listed in MIMIC_CORS_ORIGINS on the API host."],
+  },
+  too_many_attempts: {
+    title: "Too many attempts",
+    message: "Too many failed attempts.",
+    guidance: ["Wait a few minutes, then try again."],
+  },
+  setup_required: {
+    title: "Setup required",
+    message: "No admin account exists yet.",
+    guidance: [`On the API host, run ${SETUP_COMMAND} to create the first admin.`, "Then check again and sign in."],
+  },
+  last_admin: {
+    title: "Last admin",
+    message: "This is the last active admin.",
+    guidance: ["Make another user an admin first."],
+  },
+  self_action_forbidden: { title: "Not allowed on your own account", message: "You can't do this to your own account.", guidance: [] },
+  username_taken: { title: "Username taken", message: "That username is already taken.", guidance: ["Choose another username."] },
+  weak_password: {
+    title: "Password too weak",
+    message: `Passwords need at least ${PASSWORD_MIN_LENGTH} characters and must not match the username.`,
+    guidance: ["Use a longer passphrase."],
+  },
+  current_password_incorrect: {
+    title: "Wrong current password",
+    message: "The current password is wrong.",
+    guidance: ["Enter your current password again."],
+  },
   network_error: {
     title: "Server unreachable",
     message: "Could not reach the analysis server.",
     guidance: ["Check that the API is running (make dev-api) and that NEXT_PUBLIC_API_BASE_URL points to it."],
   },
   aborted: { title: "Cancelled", message: "The request was cancelled.", guidance: [] },
+  cookie_rejected: {
+    title: "Sign-in didn't stick",
+    message: "You signed in, but the browser did not keep the session cookie.",
+    guidance: [
+      "Open the app and the API on the same hostname, for example both on localhost (not one on 127.0.0.1).",
+      "Check that NEXT_PUBLIC_API_BASE_URL uses the same hostname as the address in your browser bar.",
+      "Make sure the browser allows cookies for this site.",
+    ],
+  },
   invalid_response: {
     title: "Unexpected response",
     message: "The server returned an unexpected response.",
@@ -479,4 +538,96 @@ const ERROR_DESCRIPTIONS: Record<ApiErrorCode, ErrorDescription> = {
 export function describeError(code: ApiErrorCode, serverMessage?: string | null): ErrorDescription {
   const base = ERROR_DESCRIPTIONS[code] ?? ERROR_DESCRIPTIONS.internal_error;
   return serverMessage ? { ...base, message: serverMessage } : base;
+}
+
+/** Optional page context for `describeApiError`. */
+export interface DescribeContext {
+  /**
+   * `hostnameMismatch()` from `api.ts` (page and API on different hostnames, e.g. `127.0.0.1` vs
+   * `localhost`). With the default `MIMIC_CORS_ORIGINS` the browser blocks every API call from
+   * such a page, which surfaces as `network_error`; this turns it into the actual cause.
+   */
+  hostnameMismatch?: { pageHost: string; apiHost: string } | null;
+}
+
+/** Guidance for a page whose hostname differs from the API's (see `DescribeContext`). */
+export function hostnameMismatchGuidance({ pageHost, apiHost }: { pageHost: string; apiHost: string }): string[] {
+  return [
+    `This page is on ${pageHost} but the API is on ${apiHost}. The API only accepts the origins in MIMIC_CORS_ORIGINS, and the browser won't share the session cookie across hostnames.`,
+    `Open the app on ${apiHost}, the hostname in NEXT_PUBLIC_API_BASE_URL.`,
+  ];
+}
+
+/**
+ * `describeError` for an `ApiError`, for the auth/admin forms: uses the server's own message when
+ * there is one (e.g. which `weak_password` rule failed), the client message for client codes
+ * (`cookie_rejected` names both hostnames), and turns `retryAfterS` into the guidance for
+ * `too_many_attempts`. A `network_error` on a page whose hostname differs from the API's leads
+ * with that cause (`context.hostnameMismatch`). Guidance lines the message already says are
+ * dropped (server messages often end with the same advice, e.g. `last_admin` → "…Make another
+ * user an admin first.").
+ */
+export function describeApiError(error: ApiError, context: DescribeContext = {}): ErrorDescription {
+  const message = error.serverMessage ?? (error.code === "cookie_rejected" ? error.message : null);
+  const d = describeError(error.code, message);
+  const mismatch = context.hostnameMismatch;
+  const guidance =
+    error.code === "too_many_attempts" && error.retryAfterS != null
+      ? [`${formatRetryAfter(error.retryAfterS)}.`]
+      : error.code === "network_error" && mismatch
+        ? [...hostnameMismatchGuidance(mismatch), ...d.guidance]
+        : d.guidance;
+  const said = d.message.toLowerCase();
+  return { ...d, guidance: guidance.filter((g) => !said.includes(g.toLowerCase().replace(/\.$/, ""))) };
+}
+
+/* ---------- accounts ---------- */
+
+/** Account roles. (`ROLE_LABELS` above is for IR element roles.) */
+export const USER_ROLE_LABELS: Record<UserRole, string> = { admin: "Admin", user: "User" };
+
+/**
+ * "Try again in 45 s" / "Try again in 2 min" / "Try again in 1 h 5 min" (rounded up to whole
+ * minutes above one minute, so a countdown never promises too early).
+ */
+export function formatRetryAfter(seconds: number): string {
+  const s = Math.max(0, Math.ceil(seconds));
+  if (s <= 0) return "Try again now";
+  if (s < 60) return `Try again in ${s} s`;
+  const min = Math.ceil(s / 60);
+  if (min < 60) return `Try again in ${min} min`;
+  const h = Math.floor(min / 60);
+  const rest = min % 60;
+  return `Try again in ${h} h${rest ? ` ${rest} min` : ""}`;
+}
+
+const DATE_FMT = new Intl.DateTimeFormat("en", { day: "numeric", month: "short", year: "numeric" });
+
+/**
+ * Relative time for lists: "just now", "5 min ago", "3 h ago", "yesterday", "4 days ago", then a
+ * date ("12 Sep 2026", local time zone). Unparsable input → "—". Future times (clock skew) → "just now".
+ */
+export function formatRelativeTime(iso: string, now: number = Date.now()): string {
+  const at = Date.parse(iso);
+  if (Number.isNaN(at)) return "—";
+  const s = Math.floor((now - at) / 1000);
+  if (s < 60) return "just now";
+  const min = Math.floor(s / 60);
+  if (min < 60) return `${min} min ago`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} h ago`;
+  const days = Math.floor(h / 24);
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days} days ago`;
+  return DATE_FMT.format(at);
+}
+
+/** `AdminUser.last_login_at` → "Never" or `formatRelativeTime`. */
+export function formatLastLogin(iso: string | null, now: number = Date.now()): string {
+  return iso == null ? "Never" : formatRelativeTime(iso, now);
+}
+
+/** A job's owner for the admin "Owner" column: username, or "Legacy" for pre-accounts jobs. */
+export function formatJobOwner(owner: JobStatus["owner"]): string {
+  return owner ? owner.username : "Legacy";
 }

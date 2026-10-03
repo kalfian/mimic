@@ -9,8 +9,9 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.auth.policy import USERNAME_PATTERN, normalize_username
 from app.core.errors import ErrorCode
 from app.core.stages import JobState, Stage
 from app.generate import Outputs
@@ -29,6 +30,8 @@ PixelRatioOption = Literal["auto", "1", "2", "3"]
 KeyframeKind = Literal[
     "state_a", "state_b", "mid_25", "mid_50", "mid_75", "annotated_a", "annotated_b", "element"
 ]
+#: Account role (PLAN-auth U1). Same values as ``app.auth.models.Role``.
+UserRole = Literal["admin", "user"]
 
 
 class ApiModel(BaseModel):
@@ -78,13 +81,17 @@ class HealthLimits(ApiModel):
 
 
 class Health(ApiModel):
-    """``GET /api/health``. Never calls ``claude`` or the LLM gateway."""
+    """``GET /api/health``. Never calls ``claude`` or the LLM gateway.
+
+    ``interpreter`` and ``limits`` are null for anonymous callers and for sessions with a
+    pending forced password change (PLAN-auth A12); ``status``/``version``/``ffmpeg`` are public.
+    """
 
     status: Literal["ok"] = "ok"
     version: str
     ffmpeg: bool
-    interpreter: HealthInterpreter
-    limits: HealthLimits
+    interpreter: HealthInterpreter | None = None
+    limits: HealthLimits | None = None
 
 
 # ---- interpreter check ----------------------------------------------------------------------
@@ -164,11 +171,19 @@ class JobCreated(ApiModel):
     created_at: AwareDatetime
 
 
+class JobOwner(ApiModel):
+    """The account that uploaded a job."""
+
+    id: str
+    username: str
+
+
 class JobStatus(ApiModel):
     """``GET /api/jobs/{id}``. Poll until ``status`` is terminal.
 
     ``error`` is normally null unless ``status`` is ``failed``. Exception: a ``succeeded`` job
     whose interpretation re-run failed keeps its previous result and reports that failure here.
+    ``owner`` is null only for legacy jobs uploaded before accounts existed (admin-only).
     """
 
     id: JobId
@@ -181,6 +196,110 @@ class JobStatus(ApiModel):
     updated_at: AwareDatetime
     source: JobSource | None = None
     options: JobOptions
+    owner: JobOwner | None = None
+
+
+class JobList(ApiModel):
+    """``GET /api/jobs``: newest first (``created_at`` desc, ``id`` desc), keyset-paginated.
+
+    Pass ``next_cursor`` back as ``cursor`` for the next page; null on the last page.
+    """
+
+    items: list[JobStatus]
+    next_cursor: str | None = None
+
+
+# ---- accounts (PLAN-auth §3.1) --------------------------------------------------------------
+
+
+class Me(ApiModel):
+    """``GET /api/auth/me``, ``POST /api/auth/login``, ``POST /api/auth/password``."""
+
+    id: str
+    username: str
+    role: UserRole
+    must_change_password: bool
+    created_at: AwareDatetime
+
+
+class AuthStatus(ApiModel):
+    """``GET /api/auth/status`` (public). ``setup_required``: no admin exists yet."""
+
+    setup_required: bool
+
+
+class LoginRequest(ApiModel):
+    """``POST /api/auth/login`` body. The username is stripped + lowercased server-side."""
+
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=1024)
+
+    @field_validator("username", mode="after")
+    @classmethod
+    def _normalize_username(cls, v: str) -> str:
+        return normalize_username(v)
+
+
+class ChangePasswordRequest(ApiModel):
+    """``POST /api/auth/password`` body. The policy is checked in code (``weak_password``)."""
+
+    current_password: str = Field(min_length=1, max_length=1024)
+    new_password: str = Field(min_length=1, max_length=1024)
+
+
+class AdminUser(ApiModel):
+    """One account as seen by an admin."""
+
+    id: str
+    username: str
+    role: UserRole
+    is_active: bool
+    must_change_password: bool
+    created_at: AwareDatetime
+    updated_at: AwareDatetime
+    last_login_at: AwareDatetime | None = None
+    job_count: int = Field(ge=0)
+
+
+class AdminUserList(ApiModel):
+    """``GET /api/admin/users``: every account, sorted by username (no pagination)."""
+
+    items: list[AdminUser]
+
+
+class CreateUserRequest(ApiModel):
+    """``POST /api/admin/users`` body. The username is stripped + lowercased, then validated."""
+
+    username: str = Field(pattern=USERNAME_PATTERN)
+    role: UserRole = "user"
+
+    @field_validator("username", mode="before")
+    @classmethod
+    def _normalize_username(cls, v: object) -> object:
+        return normalize_username(v) if isinstance(v, str) else v
+
+
+class UpdateUserRequest(ApiModel):
+    """``PATCH /api/admin/users/{id}`` body. At least one field must be set (non-null)."""
+
+    role: UserRole | None = None
+    is_active: bool | None = None
+
+    @model_validator(mode="after")
+    def _at_least_one(self) -> UpdateUserRequest:
+        if self.role is None and self.is_active is None:
+            raise ValueError("set at least one of role, is_active")
+        return self
+
+
+class TemporaryPassword(ApiModel):
+    """``POST /api/admin/users`` (201) and ``.../reset-password`` (200).
+
+    ``temporary_password`` is shown once; the account must change it at next sign-in.
+    """
+
+    user: AdminUser
+    temporary_password: str
 
 
 # ---- result ---------------------------------------------------------------------------------
@@ -216,13 +335,29 @@ class ResultEnvelope(ApiModel):
         return self
 
 
-#: Models exported to ``docs/contract/motion-spec.schema.json`` and ``web/lib/types.ts``.
+#: Models exported to ``docs/contract/motion-spec.schema.json`` and ``web/lib/types.ts``
+#: (serialization mode: every field required, nullable where it applies).
 CONTRACT_MODELS: tuple[type[BaseModel], ...] = (
     ResultEnvelope,
     JobCreated,
     JobStatus,
+    JobList,
     InterpretRequest,
     Health,
     InterpreterCheck,
     ErrorBody,
+    Me,
+    AuthStatus,
+    AdminUser,
+    AdminUserList,
+    TemporaryPassword,
+)
+
+#: Request bodies exported in *validation* mode, so fields with a server default are optional
+#: in TypeScript (e.g. ``CreateUserRequest.role``, ``UpdateUserRequest.*``).
+CONTRACT_REQUEST_MODELS: tuple[type[BaseModel], ...] = (
+    LoginRequest,
+    ChangePasswordRequest,
+    CreateUserRequest,
+    UpdateUserRequest,
 )

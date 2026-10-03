@@ -4,9 +4,11 @@ SHELL := /bin/bash
 
 API_DIR := api
 WEB_DIR := web
-DATA_DIR := data
+# Same data dir as the API/CLI when MIMIC_DATA_DIR is exported (relative = repo root). The
+# repo-root .env is not read here, so export it for reset-data if you set it only in .env.
+DATA_DIR := $(or $(MIMIC_DATA_DIR),data)
 
-.PHONY: help setup check-tools dev-api dev-web test test-api test-web lint contract contract-check synth eval calibrate clean-jobs
+.PHONY: help setup check-tools dev-api dev-web test test-api test-web lint contract contract-check synth eval calibrate create-admin reset-password list-users clean-jobs reset-data
 
 help: ## List targets
 	@grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -58,7 +60,27 @@ eval: ## Run the pipeline on data/synth, write <name>.ir.json, check PLAN §11.4
 calibrate: ## Monte Carlo check of confidence bands vs §11.4 targets (high band >= 90 % in target)
 	cd $(API_DIR) && uv run python scripts/calibrate_confidence.py
 
-clean-jobs: ## Delete all job data (data/jobs + job store DB). Manual retention, PLAN Q3
+# Accounts (docs/PLAN-auth.md §6). Passwords are prompted for (or read from stdin with
+# PASSWORD_STDIN=1), never passed as arguments. USER= only counts when given on the command
+# line, so the shell's own $USER is never used by accident.
+CLI := cd $(API_DIR) && uv run python -m app.cli
+CLI_USER := $(if $(filter command line,$(origin USER)),$(USER))
+CLI_PW_STDIN := $(if $(PASSWORD_STDIN),--password-stdin)
+
+create-admin: ## Create an admin account (first one claims existing jobs). [USER=<name>] [PASSWORD_STDIN=1]
+	$(CLI) create-admin $(if $(CLI_USER),--username "$(CLI_USER)") $(CLI_PW_STDIN)
+
+reset-password: ## Break-glass password reset (enables the account, signs it out). USER=<name> [PASSWORD_STDIN=1]
+	@if [ -z "$(CLI_USER)" ]; then echo "usage: make reset-password USER=<username>"; exit 2; fi
+	$(CLI) reset-password "$(CLI_USER)" $(CLI_PW_STDIN)
+
+list-users: ## List accounts (username, role, active, must-change, jobs)
+	$(CLI) list-users
+
+clean-jobs: ## Delete all jobs (rows + data/jobs/*), keep accounts. Manual retention, PLAN Q3
+	$(CLI) clean-jobs --yes
+
+reset-data: ## Wipe everything: job store DB incl. accounts + data/jobs (run create-admin again)
 	rm -rf $(DATA_DIR)/jobs $(DATA_DIR)/mimic.db $(DATA_DIR)/mimic.db-wal $(DATA_DIR)/mimic.db-shm
 	mkdir -p $(DATA_DIR)/jobs
-	@echo "job data removed"
+	@echo "all data removed (jobs + accounts); run 'make create-admin' before signing in"

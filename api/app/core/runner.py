@@ -16,6 +16,13 @@ with the same signature (``app.pipeline.run.reinterpret``). :meth:`JobRunner.sub
 atomically moves a ``succeeded`` job back to ``queued``; the previous ``result.json`` stays on
 disk until the new one replaces it. If the re-run fails or is interrupted the job returns to
 ``succeeded`` with the previous result (a failure is reported in ``JobStatus.error``).
+
+Deleted-job guard (PLAN-auth A14, §14): a job's row and directory may be deleted while it is
+queued or running (``DELETE /api/jobs/{id}``, or an admin deleting its owner). The runner never
+writes a terminal status or ``result.json`` for a job whose row is gone, and after every run (any
+outcome) it re-reads the row; if the row is gone it removes the job directory again, because the
+pipeline may have re-created it while writing artifacts. Store writes to a deleted row are
+no-ops (``UPDATE ... WHERE id``), so progress updates in between are harmless.
 """
 
 from __future__ import annotations
@@ -207,9 +214,12 @@ class JobRunner:
         if before is None:
             raise PipelineError(ErrorCode.NOT_FOUND)
         if not self._store.claim_rerun(job_id, options):
+            if self._store.get(job_id) is None:  # deleted meanwhile
+                raise PipelineError(ErrorCode.NOT_FOUND)
             raise PipelineError(ErrorCode.ALREADY_RUNNING)
         rec = self._store.get(job_id)
-        assert rec is not None
+        if rec is None:  # deleted right after the claim; nothing was submitted
+            raise PipelineError(ErrorCode.NOT_FOUND)
         self._executor.submit(self._execute_rerun, job_id, before.options)
         return rec
 
@@ -260,6 +270,8 @@ class JobRunner:
         rec = self._store.get(job_id)
         if rec is None or rec.status is not JobState.QUEUED:
             log.warning("job %s: skipped (status %s)", job_id, rec.status if rec else "missing")
+            if rec is None:  # deleted while queued
+                self._reap_if_deleted(job_id)
             return
         if self._stop.is_set():
             return  # stays queued; resubmitted on next start
@@ -272,22 +284,32 @@ class JobRunner:
             result = self._pipeline(ctx, reporter)
             if result.job_id != job_id:
                 raise RuntimeError(f"pipeline returned a result for job {result.job_id}")
+            if self._is_deleted(job_id):
+                return
             self._storage.write_json(job_id, "result.json", result.model_dump(mode="json"))
             self._store.mark_succeeded(job_id)
             log.info("job %s: succeeded in %.1fs", job_id, time.monotonic() - started)
         except JobInterrupted:
+            if self._is_deleted(job_id):
+                return
             log.warning("job %s: interrupted at stage %s", job_id, reporter.stage)
             self._store.mark_failed(
                 job_id, ErrorCode.INTERRUPTED, DEFAULT_MESSAGES[ErrorCode.INTERRUPTED]
             )
         except PipelineError as exc:
+            if self._is_deleted(job_id):
+                return
             log.info("job %s: failed at %s: %s", job_id, reporter.stage, exc)
             self._store.mark_failed(job_id, exc.code, exc.message)
         except Exception:
+            if self._is_deleted(job_id):
+                return
             log.exception("job %s: internal error at stage %s", job_id, reporter.stage)
             self._store.mark_failed(
                 job_id, ErrorCode.INTERNAL_ERROR, DEFAULT_MESSAGES[ErrorCode.INTERNAL_ERROR]
             )
+        finally:
+            self._reap_if_deleted(job_id)
 
     def _restore_result(self, rec: JobRecord) -> None:
         """Back to ``succeeded`` with the options the stored result was produced with."""
@@ -317,6 +339,8 @@ class JobRunner:
         rec = self._store.get(job_id)
         if rec is None or rec.status is not JobState.QUEUED:
             log.warning("job %s: re-run skipped (status %s)", job_id, rec.status if rec else "-")
+            if rec is None:  # deleted while queued
+                self._reap_if_deleted(job_id)
             return
         assert self._reinterpret is not None
         if self._stop.is_set():
@@ -329,17 +353,50 @@ class JobRunner:
             result = self._reinterpret(self._context(rec, rec.options), reporter)
             if result.job_id != job_id:
                 raise RuntimeError(f"re-run returned a result for job {result.job_id}")
+            if self._is_deleted(job_id):
+                return
             self._storage.write_json(job_id, "result.json", result.model_dump(mode="json"))
             self._store.mark_succeeded(job_id)
             log.info("job %s: interpretation re-run in %.1fs", job_id, time.monotonic() - started)
         except JobInterrupted:
+            if self._is_deleted(job_id):
+                return
             log.warning("job %s: re-run interrupted; previous result kept", job_id)
             self._store.mark_succeeded(job_id, options=previous)
         except PipelineError as exc:
+            if self._is_deleted(job_id):
+                return
             log.info("job %s: re-run failed: %s", job_id, exc)
             self._store.mark_succeeded(job_id, options=previous, error=(exc.code, exc.message))
         except Exception:
+            if self._is_deleted(job_id):
+                return
             log.exception("job %s: re-run internal error at stage %s", job_id, reporter.stage)
             self._store.mark_succeeded(
                 job_id, options=previous, error=(ErrorCode.INTERNAL_ERROR, RERUN_FAILED)
             )
+        finally:
+            self._reap_if_deleted(job_id)
+
+    # ---- deleted-job guard (A14) --------------------------------------------------------------
+
+    def _is_deleted(self, job_id: str) -> bool:
+        """True if the job's row is gone. A failed read counts as "not deleted" (the writes that
+        follow are no-ops on a missing row anyway)."""
+        try:
+            return self._store.get(job_id) is None
+        except Exception:
+            log.exception("job %s: could not re-read the job row", job_id)
+            return False
+
+    def _reap_if_deleted(self, job_id: str) -> None:
+        """Remove the job directory again if the row was deleted during the run. Never raises."""
+        if not self._is_deleted(job_id):
+            return
+        try:
+            self._storage.delete_job(job_id)
+        except Exception as exc:
+            log.error("job %s: deleted during the run; removing its files failed (%s)", job_id,
+                      type(exc).__name__)  # fmt: skip
+            return
+        log.info("job %s: deleted during the run; status writes skipped, files removed", job_id)

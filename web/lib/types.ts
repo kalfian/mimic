@@ -29,16 +29,40 @@ export type WarningSeverity = "info" | "warn";
 export type WarningCode = "pixel_ratio_assumed" | "timestamps_estimated" | "vfr_source" | "cursor_not_visible" | "extra_segments_ignored" | "elements_truncated" | "short_stable_state" | "not_settled" | "rotation_detected" | "interpretation_fallback" | "interpretation_disagrees" | "low_fps_source" | "preview_unavailable" | "reverse_not_recorded" | "frames_subsampled";
 export type PixelRatioOption = "auto" | "1" | "2" | "3";
 export type KeyframeKind = "state_a" | "state_b" | "mid_25" | "mid_50" | "mid_75" | "annotated_a" | "annotated_b" | "element";
+export type UserRole = "admin" | "user";
 
 /** Animated value; `kind` is fixed per property (see PROPERTY_VALUE_KIND). */
 export type Value = PxValue | RatioValue | ColorValue | ShadowValue | TextValue;
 
 /* ---------- models ---------- */
 
+/** One account as seen by an admin. */
+export interface AdminUser {
+  id: string;
+  username: string;
+  role: UserRole;
+  is_active: boolean;
+  must_change_password: boolean;
+  created_at: string;
+  updated_at: string;
+  last_login_at: string | null;
+  job_count: number;
+}
+
+/** `GET /api/admin/users`: every account, sorted by username (no pagination). */
+export interface AdminUserList {
+  items: AdminUser[];
+}
+
 export interface Artifacts {
   /** H.264 preview; null if the transcode failed. */
   video_url: string | null;
   keyframes: KeyframeArtifact[];
+}
+
+/** `GET /api/auth/status` (public). `setup_required`: no admin exists yet. */
+export interface AuthStatus {
+  setup_required: boolean;
 }
 
 /** Axis-aligned rectangle in CSS px, full-frame coordinates (x, y = top-left). */
@@ -47,6 +71,12 @@ export interface Box {
   y: number;
   w: number;
   h: number;
+}
+
+/** `POST /api/auth/password` body. The policy is checked in code (`weak_password`). */
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
 }
 
 /** Solid color (color, background-color). */
@@ -60,6 +90,12 @@ export interface ColorValue {
 export interface Confidence {
   value: number;
   band: ConfidenceBand;
+}
+
+/** `POST /api/admin/users` body. The username is stripped + lowercased, then validated. */
+export interface CreateUserRequest {
+  username: string;
+  role?: UserRole;
 }
 
 export interface Cursor {
@@ -100,20 +136,25 @@ export interface ErrorBody {
 }
 
 /** Closed set of error codes shared with the frontend (`web/lib/types.ts`). */
-export type ErrorCode = "unsupported_format" | "file_too_large" | "too_long" | "too_short" | "decode_failed" | "invalid_request" | "no_motion_detected" | "unsupported_motion" | "no_stable_state" | "internal_error" | "interrupted" | "not_found" | "not_ready" | "already_running";
+export type ErrorCode = "unsupported_format" | "file_too_large" | "too_long" | "too_short" | "decode_failed" | "invalid_request" | "no_motion_detected" | "unsupported_motion" | "no_stable_state" | "internal_error" | "interrupted" | "not_found" | "not_ready" | "already_running" | "unauthenticated" | "invalid_credentials" | "account_disabled" | "forbidden" | "password_change_required" | "origin_not_allowed" | "too_many_attempts" | "setup_required" | "last_admin" | "self_action_forbidden" | "username_taken" | "weak_password" | "current_password_incorrect";
 
 export interface ErrorDetail {
   code: ErrorCode;
   message: string;
 }
 
-/** `GET /api/health`. Never calls `claude` or the LLM gateway. */
+/**
+ * `GET /api/health`. Never calls `claude` or the LLM gateway.
+ *
+ * `interpreter` and `limits` are null for anonymous callers and for sessions with a
+ * pending forced password change (PLAN-auth A12); `status`/`version`/`ffmpeg` are public.
+ */
 export interface Health {
   status: "ok";
   version: string;
   ffmpeg: boolean;
-  interpreter: HealthInterpreter;
-  limits: HealthLimits;
+  interpreter: HealthInterpreter | null;
+  limits: HealthLimits | null;
 }
 
 export interface HealthInterpreter {
@@ -195,10 +236,26 @@ export interface JobCreated {
   created_at: string;
 }
 
+/**
+ * `GET /api/jobs`: newest first (`created_at` desc, `id` desc), keyset-paginated.
+ *
+ * Pass `next_cursor` back as `cursor` for the next page; null on the last page.
+ */
+export interface JobList {
+  items: JobStatus[];
+  next_cursor: string | null;
+}
+
 /** Upload form options echoed back. `use_interpreter` is opt-in (default off, PLAN P9). */
 export interface JobOptions {
   pixel_ratio: PixelRatioOption;
   use_interpreter: boolean;
+}
+
+/** The account that uploaded a job. */
+export interface JobOwner {
+  id: string;
+  username: string;
 }
 
 /** Probe summary; null until probing finished. */
@@ -218,6 +275,7 @@ export type JobState = "queued" | "processing" | "succeeded" | "failed";
  *
  * `error` is normally null unless `status` is `failed`. Exception: a `succeeded` job
  * whose interpretation re-run failed keeps its previous result and reports that failure here.
+ * `owner` is null only for legacy jobs uploaded before accounts existed (admin-only).
  */
 export interface JobStatus {
   id: string;
@@ -230,6 +288,7 @@ export interface JobStatus {
   updated_at: string;
   source: JobSource | null;
   options: JobOptions;
+  owner: JobOwner | null;
 }
 
 /** One PNG. `t_ms` is null for composite images (element crops). */
@@ -240,6 +299,21 @@ export interface KeyframeArtifact {
   /** Set for kind=element. */
   element_id: string | null;
   url: string;
+}
+
+/** `POST /api/auth/login` body. The username is stripped + lowercased server-side. */
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+/** `GET /api/auth/me`, `POST /api/auth/login`, `POST /api/auth/password`. */
+export interface Me {
+  id: string;
+  username: string;
+  role: UserRole;
+  must_change_password: boolean;
+  created_at: string;
 }
 
 /** A static (non-animated) measurement with its own confidence. */
@@ -409,6 +483,16 @@ export interface SpecWarning {
  */
 export type Stage = "queued" | "probing" | "preview" | "scanning" | "decoding" | "detecting_elements" | "measuring" | "fitting" | "interpreting" | "generating" | "done";
 
+/**
+ * `POST /api/admin/users` (201) and `.../reset-password` (200).
+ *
+ * `temporary_password` is shown once; the account must change it at next sign-in.
+ */
+export interface TemporaryPassword {
+  user: AdminUser;
+  temporary_password: string;
+}
+
 /** Opaque content description (`content` property; not measured geometrically). */
 export interface TextValue {
   kind: "text";
@@ -459,6 +543,12 @@ export interface Trigger {
   reverse_kind: ReverseTriggerKind;
   description: string;
   confidence: Confidence;
+}
+
+/** `PATCH /api/admin/users/{id}` body. At least one field must be set (non-null). */
+export interface UpdateUserRequest {
+  role?: UserRole | null;
+  is_active?: boolean | null;
 }
 
 /* ---------- constants mirrored from the backend ---------- */
@@ -519,3 +609,9 @@ export const BAND_HIGH_MIN = 0.8;
 export const BAND_MEDIUM_MIN = 0.5;
 /** Transitions with overall confidence below this are 'uncertain observations'. */
 export const UNCERTAIN_BELOW = 0.3;
+
+/** Password length bounds (characters after NFKC normalization, app/auth/policy.py). */
+export const PASSWORD_MIN_LENGTH = 12;
+export const PASSWORD_MAX_LENGTH = 256;
+/** Username rule (lowercase; app/auth/policy.py). Use with `new RegExp(...)`. */
+export const USERNAME_PATTERN = "^[a-z0-9][a-z0-9._-]{2,31}$";

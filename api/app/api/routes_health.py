@@ -1,4 +1,9 @@
-"""``GET /api/health`` (PLAN §5). Must stay cheap: no subprocess and no network calls."""
+"""``GET /api/health`` (PLAN §5). Must stay cheap: no subprocess and no network calls.
+
+Public (PLAN-auth A12): anonymous callers, and sessions with a pending forced password change,
+get only ``status``/``version``/``ffmpeg`` (``interpreter`` and ``limits`` are null). A full
+session gets everything.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +15,7 @@ from fastapi import APIRouter
 from app import __version__
 from app.api.deps import ServicesDep
 from app.api.schemas import Health, HealthInterpreter, HealthLimits
+from app.auth.deps import OptionalUserDep
 from app.config import Settings
 
 router = APIRouter(tags=["health"])
@@ -48,9 +54,11 @@ def interpreter_status(settings: Settings) -> HealthInterpreter:
 
 
 @router.get("/api/health", response_model=Health)
-def health(services: ServicesDep) -> Health:
+def health(services: ServicesDep, user: OptionalUserDep) -> Health:
     s = services.settings
     ffmpeg_ok = shutil.which(s.ffmpeg_bin) is not None and shutil.which(s.ffprobe_bin) is not None
+    if user is None:  # anonymous or forced password change: public subset only
+        return Health(version=__version__, ffmpeg=ffmpeg_ok)
     limits = HealthLimits(
         max_upload_mb=s.max_upload_mb,
         max_duration_s=s.max_duration_s,

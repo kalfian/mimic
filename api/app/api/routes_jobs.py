@@ -1,4 +1,9 @@
-"""Job routes (PLAN §5): upload, status, result, preview video, keyframes.
+"""Job routes (PLAN §5): upload, list, status, result, preview video, keyframes, delete.
+
+Authorization (PLAN-auth §3.3, §4, §14): every route needs a full session (401 / 403
+``password_change_required``). A new job is owned by its uploader. Job-by-id routes go through
+``JobDep`` (``app.api.deps.get_job``), which answers 404 ``not_found`` for a job the caller may not
+see (users: their own jobs only; admins: every job incl. legacy ownerless ones).
 
 Upload validation runs synchronously before the 202 (PLAN §5): form fields, extension,
 size (``Content-Length`` pre-check, then a hard limit while copying), container sniff, ffprobe
@@ -15,9 +20,9 @@ from __future__ import annotations
 import logging
 import unicodedata
 import uuid
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, Response
 from starlette.datastructures import UploadFile
@@ -31,14 +36,19 @@ from app.api.schemas import (
     ErrorDetail,
     InterpretRequest,
     JobCreated,
+    JobList,
     JobOptions,
+    JobOwner,
     JobSource,
     JobStatus,
     PixelRatioOption,
     ResultEnvelope,
 )
+from app.auth.deps import CurrentUserDep
+from app.auth.models import UserRecord
+from app.auth.policy import is_valid_user_id
 from app.core.errors import RERUN_UNAVAILABLE_MESSAGE, ErrorCode, PipelineError
-from app.core.jobstore import JobRecord
+from app.core.jobstore import LIST_LIMIT_MAX, InvalidCursor, JobRecord
 from app.core.stages import JobState, stage_label
 from app.core.storage import MEASUREMENT_FILE
 from app.pipeline.probe import validate_upload
@@ -51,6 +61,10 @@ router = APIRouter(tags=["jobs"])
 #: pre-checking ``Content-Length``. The exact limit is enforced on the file bytes while copying.
 MULTIPART_OVERHEAD_BYTES = 64 * 1024
 MAX_FILENAME_CHARS = 200
+#: Default page size of ``GET /api/jobs``.
+LIST_LIMIT_DEFAULT = 50
+#: ``GET /api/jobs?owner=me``: the caller's own jobs.
+OWNER_ME = "me"
 
 _PIXEL_RATIO_OPTIONS: frozenset[str] = frozenset({"auto", "1", "2", "3"})
 _TRUE = frozenset({"true", "1", "on", "yes"})
@@ -100,6 +114,13 @@ def to_job_status(rec: JobRecord) -> JobStatus:
         if rec.error_code is not None
         else None
     )
+    # ``owner`` is null for legacy jobs (no owner_id). A dangling owner_id (no users row; only
+    # possible with old code or manual edits) also maps to null: there is no username to show.
+    owner = (
+        JobOwner(id=rec.owner_id, username=rec.owner_username)
+        if rec.owner_id is not None and rec.owner_username is not None
+        else None
+    )
     return JobStatus(
         id=rec.id,
         status=rec.status,
@@ -111,6 +132,7 @@ def to_job_status(rec: JobRecord) -> JobStatus:
         updated_at=rec.updated_at,
         source=rec.source,
         options=rec.options,
+        owner=owner,
     )
 
 
@@ -163,6 +185,26 @@ def clean_filename(raw: str | None) -> str:
     return name or "upload"
 
 
+def resolve_owner_filter(user: UserRecord, owner: str | None) -> str | None:
+    """``owner`` query value -> ``list_jobs(owner_id=...)``.
+
+    Users always get their own jobs (``owner`` may be omitted, ``me`` or their own id; another
+    id is 403 ``forbidden``). Admins: omitted = every job incl. legacy ones, ``me`` = their own,
+    a user id = that user's jobs (an unknown id simply yields an empty list). A value that is
+    neither ``me`` nor a user id is 422 ``invalid_request``.
+    """
+    if owner is not None:
+        owner = owner.strip()
+        if owner == OWNER_ME:
+            return user.id
+        if not is_valid_user_id(owner):
+            raise _invalid("owner must be 'me' or a user id.")
+        if owner != user.id and not user.is_admin:
+            raise PipelineError(ErrorCode.FORBIDDEN)
+        return owner
+    return None if user.is_admin else user.id
+
+
 def _precheck_content_length(request: Request, max_bytes: int) -> None:
     raw = request.headers.get("content-length")
     if raw is None:
@@ -188,10 +230,11 @@ def _precheck_content_length(request: Request, max_bytes: int) -> None:
     "/api/jobs",
     status_code=202,
     response_model=JobCreated,
-    responses=_error_responses(413, 415, 422),
+    responses=_error_responses(401, 403, 413, 415, 422),
     openapi_extra=_UPLOAD_OPENAPI,
 )
-async def create_job(request: Request, services: ServicesDep) -> JobCreated:
+async def create_job(request: Request, services: ServicesDep, user: CurrentUserDep) -> JobCreated:
+    """Upload a recording. The job is owned by the caller (PLAN-auth U3)."""
     settings, storage, store = services.settings, services.storage, services.store
     _precheck_content_length(request, settings.max_upload_bytes)
 
@@ -228,7 +271,12 @@ async def create_job(request: Request, services: ServicesDep) -> JobCreated:
                 duration_s=round(fp.duration_s, 3),
             )
             rec = store.create(
-                job_id, original_filename=filename, ext=ext, options=options, source=source
+                job_id,
+                original_filename=filename,
+                ext=ext,
+                options=options,
+                source=source,
+                owner_id=user.id,
             )
         except BaseException:
             storage.delete_job(job_id)
@@ -237,11 +285,44 @@ async def create_job(request: Request, services: ServicesDep) -> JobCreated:
         await form.close()
 
     services.runner.submit(job_id)
-    log.info("job %s: queued (%s, %s)", job_id, ext, options.model_dump_json())
+    log.info("job %s: queued for user %s (%s, %s)", job_id, user.id, ext, options.model_dump_json())
     return JobCreated(id=job_id, created_at=rec.created_at)
 
 
-@router.get("/api/jobs/{job_id}", response_model=JobStatus, responses=_error_responses(404))
+@router.get("/api/jobs", response_model=JobList, responses=_error_responses(401, 403, 422))
+def list_jobs(
+    user: CurrentUserDep,
+    services: ServicesDep,
+    owner: Annotated[
+        str | None,
+        Query(description="'me' or a user id. Ids other than your own are admin-only."),
+    ] = None,
+    status: Annotated[JobState | None, Query(description="Only jobs in this state.")] = None,
+    limit: Annotated[int, Query(ge=1, le=LIST_LIMIT_MAX)] = LIST_LIMIT_DEFAULT,
+    cursor: Annotated[
+        str | None, Query(max_length=512, description="next_cursor of the previous page.")
+    ] = None,
+) -> JobList:
+    """Jobs visible to the caller, newest first, keyset-paginated (PLAN-auth §3.3).
+
+    Users see only their own jobs. Admins see every job (legacy ownerless ones included) unless
+    ``owner`` narrows it down.
+    """
+    owner_id = resolve_owner_filter(user, owner)
+    try:
+        page = services.store.list_jobs(
+            owner_id=owner_id, status=status, limit=limit, cursor=cursor or None
+        )
+    except InvalidCursor as exc:
+        raise _invalid("cursor is not valid; start again without it.") from exc
+    except ValueError as exc:  # limit out of range (also validated by Query above)
+        raise _invalid(str(exc)) from exc
+    return JobList(items=[to_job_status(r) for r in page.items], next_cursor=page.next_cursor)
+
+
+@router.get(
+    "/api/jobs/{job_id}", response_model=JobStatus, responses=_error_responses(401, 403, 404)
+)
 def get_job_status(job: JobDep) -> JobStatus:
     return to_job_status(job)
 
@@ -249,7 +330,7 @@ def get_job_status(job: JobDep) -> JobStatus:
 @router.get(
     "/api/jobs/{job_id}/result",
     response_model=ResultEnvelope,
-    responses=_error_responses(404, 409),
+    responses=_error_responses(401, 403, 404, 409),
 )
 def get_result(job: JobDep, services: ServicesDep) -> Response:
     if job.status is not JobState.SUCCEEDED:
@@ -272,7 +353,7 @@ def get_result(job: JobDep, services: ServicesDep) -> Response:
     "/api/jobs/{job_id}/interpret",
     status_code=202,
     response_model=JobStatus,
-    responses=_error_responses(404, 409, 422),
+    responses=_error_responses(401, 403, 404, 409, 422),
 )
 def rerun_interpretation(job: JobDep, body: InterpretRequest, services: ServicesDep) -> JobStatus:
     """Re-run AI labeling (Layer B) + assemble + render on the stored measurement.
@@ -280,7 +361,7 @@ def rerun_interpretation(job: JobDep, body: InterpretRequest, services: Services
     Only for ``succeeded`` jobs; the video is not decoded again. The job goes back through
     ``queued`` → ``interpreting`` → ``generating`` → ``done``; poll ``GET /api/jobs/{id}`` as after
     an upload. ``use_interpreter: true`` is the explicit opt-in that sends the keyframes to the
-    configured interpreter (PLAN P9).
+    configured interpreter (PLAN P9). Allowed on the caller's own jobs (admins: any job).
     """
     if job.status in (JobState.QUEUED, JobState.PROCESSING):
         raise PipelineError(ErrorCode.ALREADY_RUNNING)
@@ -299,7 +380,7 @@ def rerun_interpretation(job: JobDep, body: InterpretRequest, services: Services
 @router.get(
     "/api/jobs/{job_id}/video",
     response_class=FileResponse,
-    responses={200: {"content": {"video/mp4": {}}}, **_error_responses(404)},
+    responses={200: {"content": {"video/mp4": {}}}, **_error_responses(401, 403, 404)},
 )
 def get_video(job: JobDep, services: ServicesDep) -> FileResponse:
     """H.264 preview. Starlette's ``FileResponse`` answers ``Range`` requests with 206."""
@@ -312,7 +393,7 @@ def get_video(job: JobDep, services: ServicesDep) -> FileResponse:
 @router.get(
     "/api/jobs/{job_id}/keyframes/{name}",
     response_class=FileResponse,
-    responses={200: {"content": {"image/png": {}}}, **_error_responses(404)},
+    responses={200: {"content": {"image/png": {}}}, **_error_responses(401, 403, 404)},
 )
 def get_keyframe(job: JobDep, name: str, services: ServicesDep) -> FileResponse:
     if KEYFRAME_NAME_RE.fullmatch(name) is None:
@@ -321,3 +402,25 @@ def get_keyframe(job: JobDep, name: str, services: ServicesDep) -> FileResponse:
     if not path.is_file():
         raise PipelineError(ErrorCode.NOT_FOUND, "Keyframe not found.")
     return FileResponse(path, media_type="image/png")
+
+
+@router.delete(
+    "/api/jobs/{job_id}",
+    status_code=204,
+    response_class=Response,
+    responses=_error_responses(401, 403, 404),
+)
+def delete_job(job: JobDep, user: CurrentUserDep, services: ServicesDep) -> Response:
+    """Delete a job, its row and its files (PLAN-auth §14). Owner or admin; anyone else gets 404.
+
+    Works in any state. A queued or running job (incl. an interpretation re-run) is removed
+    right away; the runner's deleted-job guard (A14) skips its status writes and removes the
+    directory again if the pipeline re-created it.
+    """
+    services.store.delete(job.id)  # False = deleted concurrently: same outcome, still 204
+    try:
+        services.storage.delete_job(job.id)
+    except Exception as exc:  # best effort: the row is gone, the runner guard retries running jobs
+        log.warning("job %s: deleting its files failed (%s)", job.id, type(exc).__name__)
+    log.info("user %s deleted job %s", user.id, job.id)
+    return Response(status_code=204)
