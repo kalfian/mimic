@@ -1,0 +1,109 @@
+INTERACTION
+
+Type: Hover interaction — high confidence (85%), from heuristic
+Pattern: card
+Target: Product card (e1) — Product card with an image, a title and an arrow icon
+Trigger: Animation begins when the pointer enters the card boundary and reverses when it leaves.
+Trigger kind: pointer_enter / reverse: pointer_leave — high confidence (85%)
+Direction: forward + reverse
+Total duration: approximately 350ms forward, approximately 220ms reverse
+
+PRODUCT CARD (e1)
+
+Role: card
+Border radius (static): possibly 12px (low confidence)
+
+translateY
+  Initial: translateY(0px)
+  Hover: approximately translateY(-8px)
+  Change: moves upward approximately 8px
+  Duration: approximately 280ms
+  Easing: ease-out, medium confidence
+  Confidence: high (85%)
+
+box-shadow (estimated)
+  Initial: possibly box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08)
+  Hover: possibly box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16)
+  Change: possibly shadow becomes larger and darker
+  Duration: approximately 280ms
+  Easing: ease-out, low confidence
+  Confidence: low (45%)
+  Notes: estimated, low confidence
+
+PRODUCT IMAGE (e2)
+
+Role: image; inside Product card (e1)
+
+scale
+  Initial: scale(1.00)
+  Hover: approximately scale(1.06)
+  Change: scales up from 1.00 to approximately 1.06
+  Duration: approximately 320ms
+  Delay: approximately 30ms
+  Easing: cubic-bezier(0.16, 1, 0.3, 1) (close to expoOut), medium confidence
+  Transform origin: center
+  Confidence: medium (76%)
+  Notes: relative to parent e1
+
+CARD TITLE (e3)
+
+Role: title; inside Product card (e1)
+
+color
+  Initial: approximately color: #111111
+  Hover: approximately color: #5252FF
+  Change: text color changes from approximately #111111 to #5252FF
+  Duration: approximately 200ms
+  Easing: ease, medium confidence
+  Confidence: medium (70%)
+
+ARROW ICON (e4)
+
+Role: icon; inside Product card (e1)
+
+translateX
+  Initial: translateX(0px)
+  Hover: approximately translateX(4px)
+  Change: moves approximately 4px to the right
+  Duration: approximately 200ms
+  Delay: approximately 80ms
+  Easing: ease-out, medium confidence
+  Confidence: medium (63%)
+  Notes: relative to parent e1
+
+opacity
+  Initial: possibly opacity: 0.7
+  Hover: possibly opacity: 1
+  Change: possibly opacity increases from approximately 0.7 to 1
+  Duration: approximately 200ms
+  Delay: approximately 80ms
+  Easing: ease-out, low confidence
+  Confidence: low (49%)
+
+REVERSE
+
+- Product card (e1) translateY: -8px → 0px, approximately 220ms, ease-in-out; confidence high (81%)
+- Product card (e1) box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16) → 0 4px 12px rgba(0, 0, 0, 0.08), approximately 220ms, ease-in-out; confidence low (42%)
+- Product image (e2) scale: 1.06 → 1.00, approximately 220ms, ease-in-out; confidence medium (71%)
+- Card title (e3) color: #5252FF → #111111, approximately 180ms, ease; confidence medium (65%)
+- Arrow icon (e4) translateX: 4px → 0px, approximately 180ms, ease-in-out; confidence medium (60%)
+- Arrow icon (e4) opacity: 1 → 0.7, approximately 180ms, ease-in-out; confidence low (46%)
+
+TIMING RELATIONSHIPS
+
+Forward:
+- Product card movement and shadow, and card title text color animate simultaneously.
+- Product image scaling begins approximately 30ms after the product card movement.
+- Arrow icon movement and opacity begin approximately 80ms after the product card movement.
+Reverse:
+- Product card movement and shadow, product image scaling, card title text color, and arrow icon movement and opacity animate simultaneously.
+
+UNCERTAIN OBSERVATIONS
+
+None.
+
+NOTES
+
+- Values are visual estimates from a screen recording, not source CSS.
+- Geometry is in CSS px; display scale assumed 2x from the 2880x1800 recording.
+- Timing resolution: about 17ms per frame (60 fps effective).

@@ -1,0 +1,241 @@
+@import "tailwindcss";
+
+/*
+ * Mimic design tokens.
+ *
+ * Direction: a measuring instrument. Graphite neutrals, hairline rules instead of shadows,
+ * monospace for every number, and one signal colour (orange, the same hue the pipeline uses to
+ * annotate keyframes) reserved for measured forward motion. Reverse motion is graphite.
+ * Light and dark follow the OS (prefers-color-scheme): people use dev tools in both.
+ *
+ * Scales
+ *   spacing   Tailwind's 4 px grid (1 = 4 px); layouts use 2/3/4/6/8/12.
+ *   type      11 / 12 / 13 / 14 / 16 / 20 / 28 px; weights 400 / 500 / 600 only.
+ *   radius    3 px (chips, bars, inputs) and 6 px (panels, buttons). Nothing else.
+ *   elevation none; panels are separated by 1 px rules. Only the dropzone drag state tints.
+ */
+
+:root {
+  --canvas: #f6f6f4;
+  --surface: #ffffff;
+  --surface-2: #efefec;
+  --line: #e1e1dc;
+  --line-strong: #c4c4bd;
+  --ink: #18181a;
+  --ink-2: #44443f; /* 9.8:1 on surface */
+  --ink-3: #66665f; /* 5.8:1 on surface, 5.3:1 on canvas */
+  --on-ink: #fafaf9;
+
+  --signal: #b93c0a; /* text/icons, 5.6:1 on surface */
+  --signal-fill: #e8590c; /* bars, 3.6:1 against surface (non-text) */
+  --signal-soft: #fdf0e8;
+  --rev-fill: #55554f;
+
+  --ok: #17703a;
+  --ok-soft: #e9f5ee;
+  --warn: #8f5a00;
+  --warn-soft: #fbf3e2;
+  --danger: #b4231b;
+  --danger-soft: #fcecea;
+
+  --focus: #18181a;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: #0f0f10;
+    --surface: #161617;
+    --surface-2: #1f1f21;
+    --line: #2a2a2d;
+    --line-strong: #3d3d41;
+    --ink: #ededea;
+    --ink-2: #bdbdb7;
+    --ink-3: #93938d; /* 5.8:1 on surface */
+    --on-ink: #111112;
+
+    --signal: #ff9a5c;
+    --signal-fill: #f2701f;
+    --signal-soft: #2a1a10;
+    --rev-fill: #a5a59e;
+
+    --ok: #5fcf8a;
+    --ok-soft: #12231a;
+    --warn: #e6b34d;
+    --warn-soft: #261f0f;
+    --danger: #ff8178;
+    --danger-soft: #2b1514;
+
+    --focus: #ededea;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-on-ink: var(--on-ink);
+  --color-signal: var(--signal);
+  --color-signal-fill: var(--signal-fill);
+  --color-signal-soft: var(--signal-soft);
+  --color-rev-fill: var(--rev-fill);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.375rem;
+  --text-md: 1rem;
+  --text-md--line-height: 1.5rem;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.75rem;
+  --text-xl--line-height: 2.125rem;
+
+  --radius-sm: 3px;
+  --radius-md: 6px;
+}
+
+@layer base {
+  html {
+    background: var(--canvas);
+  }
+  body {
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--text-base--line-height);
+    font-feature-settings: "ss01", "cv11";
+  }
+  ::selection {
+    background: var(--signal-soft);
+    color: var(--ink);
+  }
+  @media (prefers-color-scheme: dark) {
+    ::selection {
+      background: #4a2a14;
+    }
+  }
+}
+
+/* One focus treatment everywhere: 2 px ink outline, offset so it never hides the control. */
+@utility focus-ring {
+  &:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+}
+
+/* Tabular figures for any measured number. */
+@utility nums {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Section label: the instrument-panel caption used above every panel. */
+@utility caption {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  line-height: var(--text-2xs--line-height);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* ---------- motion timeline bars (confidence is encoded by fill pattern, not colour) ---------- */
+
+.tl-bar {
+  --lane: var(--signal-fill);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--lane);
+  color: var(--lane);
+}
+.tl-bar[data-lane="reverse"] {
+  --lane: var(--rev-fill);
+}
+.tl-bar[data-band="high"] {
+  background: var(--lane);
+  color: var(--surface);
+}
+.tl-bar[data-band="medium"] {
+  background: color-mix(in oklab, var(--lane) 45%, var(--surface));
+  color: var(--ink);
+}
+.tl-bar[data-band="low"] {
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--lane) 55%, transparent) 0 2px,
+    transparent 2px 6px
+  );
+  color: var(--ink);
+}
+.tl-bar[data-uncertain="true"] {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--ink-3);
+  color: var(--ink-3);
+}
+.tl-bar[data-selected="true"] {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+/* Legend swatches reuse the bar rules. */
+.tl-swatch {
+  display: inline-block;
+  width: 1.5rem;
+  height: 0.625rem;
+}
+
+.hatch {
+  background: repeating-linear-gradient(135deg, var(--line) 0 1px, transparent 1px 7px);
+}
+
+@keyframes mimic-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes mimic-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.spin {
+  animation: mimic-spin 0.9s linear infinite;
+}
+.pulse {
+  animation: mimic-pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

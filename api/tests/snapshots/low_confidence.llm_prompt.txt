@@ -1,0 +1,38 @@
+Recreate the reference UI interaction as follows.
+
+STRUCTURE
+
+Create a card containing:
+- image
+- text
+- icon
+
+Animated elements referenced below: card, image, text, icon.
+
+INTERACTION
+
+The entire card acts as the hover target.
+The interaction appears to be: hover interaction (low confidence).
+
+When the interaction starts (most likely on hover):
+
+1. Move the entire card upward approximately 8px over approximately 280ms using an ease-out curve (medium confidence).
+2. Simultaneously, subtly change the text color from approximately #111111 to #5252FF over approximately 200ms (duration uncertain) using an ease curve (low confidence).
+3. Subtly move the icon approximately 4px to the right over approximately 200ms (duration uncertain) using an ease-out curve, starting approximately 80ms after the card movement begins (low confidence).
+
+The animation should feel smooth and responsive, not springy.
+
+The reverse transition was not recorded. When the interaction ends, reverse all properties to their original states, mirroring the timings above.
+
+UNCERTAIN (OPTIONAL)
+
+Possibly also (very low confidence; include only if it matches the reference):
+- a subtle card shadow change (0 4px 12px rgba(0, 0, 0, 0.08) to 0 12px 32px rgba(0, 0, 0, 0.16))
+- a subtle image scaling change (1.00 to 1.06)
+- a subtle icon opacity change (0.7 to 1)
+
+CONSTRAINTS
+
+All numbers are estimates measured from a screen recording (display scale 1x as set on upload); keep them as targets, not exact source values.
+The trigger could not be determined; implement as hover unless the component is a menu/modal.
+Do not invent additional animations that are not described above.

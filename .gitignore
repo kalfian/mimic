@@ -1,0 +1,29 @@
+# runtime data (uploads, frames, artifacts, job DB, synthetic videos)
+data/
+
+# planning scratch
+docs/plans/
+
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# node / next
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# env files (examples are committed)
+.env*
+!.env.example
+!.env.local.example
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

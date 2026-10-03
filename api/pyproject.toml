@@ -1,0 +1,40 @@
+[project]
+name = "mimic-api"
+version = "0.1.0"
+description = "Mimic backend: UI motion reverse engineering (FastAPI + FFmpeg/OpenCV measurement pipeline)."
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "fastapi>=0.142.2",
+    "httpx>=0.28.1",
+    "numpy>=2.5.3",
+    # OpenCV 5.x resolved on 2026-10-02. Keep the upper bound until a 6.x API review.
+    "opencv-python-headless>=5.0.0.93,<6",
+    "pydantic>=2.13,<3",
+    "pydantic-settings>=2.15.0",
+    "python-multipart>=0.0.32",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "jsonschema>=4.26.0",
+    "pytest>=9.1.1",
+    "ruff>=0.16.10",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra -m 'not synth and not claude_live'"
+markers = [
+    "synth: end-to-end accuracy on synthetic videos (slow; run via `make eval`)",
+    "claude_live: calls the real `claude` CLI (manual, opt-in)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

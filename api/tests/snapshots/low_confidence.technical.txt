@@ -1,0 +1,74 @@
+INTERACTION
+
+Type: possibly hover interaction — low confidence (40%), from heuristic
+Pattern: card
+Target: Card (e1)
+Trigger: Trigger could not be determined (no cursor visible).
+Trigger kind: unknown / reverse: unknown — low confidence (30%)
+Direction: forward only (reverse not recorded)
+Total duration: approximately 350ms forward
+
+CARD (e1)
+
+Role: card
+Border radius (static): possibly 12px (low confidence)
+Shadow (static): possibly 0 4px 12px rgba(0, 0, 0, 0.08) (low confidence)
+
+translateY
+  Initial: translateY(0px)
+  Hover: approximately translateY(-8px)
+  Change: moves upward approximately 8px
+  Duration: approximately 280ms
+  Easing: ease-out, low confidence
+  Confidence: medium (55%)
+
+TEXT (e3)
+
+Role: text; inside Card (e1)
+
+color
+  Initial: possibly color: #111111
+  Hover: possibly color: #5252FF
+  Change: possibly text color changes from approximately #111111 to #5252FF
+  Duration: approximately 200ms (duration uncertain)
+  Easing: ease, low confidence
+  Confidence: low (42%)
+
+ICON (e4)
+
+Role: icon; inside Card (e1)
+
+translateX
+  Initial: possibly translateX(0px)
+  Hover: possibly translateX(4px)
+  Change: possibly moves approximately 4px to the right
+  Duration: approximately 200ms (duration uncertain)
+  Delay: approximately 80ms
+  Easing: ease-out, low confidence
+  Confidence: low (35%)
+  Notes: relative to parent e1
+
+REVERSE
+
+Not recorded — assume the forward timings, reversed.
+
+TIMING RELATIONSHIPS
+
+Forward:
+- Card movement and text color animate simultaneously.
+- Icon movement begins approximately 80ms after the card movement.
+
+UNCERTAIN OBSERVATIONS
+
+- Card (e1), forward: possibly a subtle box-shadow change (0 4px 12px rgba(0, 0, 0, 0.08) → 0 12px 32px rgba(0, 0, 0, 0.16)); confidence low (20%). Not included above.
+- Image (e2), forward: possibly a subtle scale change (1.00 → 1.06); confidence low (25%). Not included above.
+- Icon (e4), forward: possibly a subtle opacity change (0.7 → 1); confidence low (28%). Not included above.
+
+NOTES
+
+- Values are visual estimates from a screen recording, not source CSS.
+- Geometry is in CSS px; display scale 1x as set on upload.
+- Timing resolution: about 33ms per frame (30 fps effective).
+- Element labels are heuristic (AI labeling status: disabled).
+- No cursor was visible; the trigger is inferred from the motion only.
+- Only the forward motion was recorded; reverse timings are not measured.

@@ -1,0 +1,37 @@
+Recreate the reference UI interaction as follows.
+
+STRUCTURE
+
+Create a product card containing:
+- image
+- category label
+- title
+- description
+- arrow icon
+
+Animated elements referenced below: product card, product image, card title, arrow icon.
+
+INTERACTION
+
+The entire product card acts as the hover target.
+
+When the pointer enters the product card:
+
+1. Move the entire product card upward approximately 8px over approximately 280ms using an ease-out curve.
+2. Simultaneously, subtly increase the product card shadow from approximately 0 4px 12px rgba(0, 0, 0, 0.08) to 0 12px 32px rgba(0, 0, 0, 0.16) over approximately 280ms using an ease-out curve (low confidence).
+3. Simultaneously, change the card title text color from approximately #111111 to #5252FF over approximately 200ms using an ease curve (medium confidence).
+4. Scale the product image from 1.00 to approximately 1.06 around its center over approximately 320ms using cubic-bezier(0.16, 1, 0.3, 1) (close to expoOut), starting approximately 30ms after the product card movement begins (medium confidence).
+5. Move the arrow icon approximately 4px to the right over approximately 200ms using an ease-out curve, starting approximately 80ms after the product card movement begins (medium confidence).
+6. Simultaneously, subtly increase the arrow icon opacity from approximately 0.7 to 1 over approximately 200ms using an ease-out curve (low confidence).
+
+The animation should feel smooth and responsive, not springy.
+
+When the pointer leaves the product card, reverse all properties to their original states:
+- Product card movement and shadow, and product image scaling: over approximately 220ms using an ease-in-out curve.
+- Card title text color: over approximately 180ms using an ease curve.
+- Arrow icon movement and opacity: over approximately 180ms using an ease-in-out curve.
+
+CONSTRAINTS
+
+All numbers are estimates measured from a screen recording (display scale assumed 2x); keep them as targets, not exact source values.
+Do not invent additional animations that are not described above.

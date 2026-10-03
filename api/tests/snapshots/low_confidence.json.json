@@ -1,0 +1,608 @@
+{
+  "schema_version": "0.1",
+  "job_id": "3f2b9c1d8e7a4b6c9d0e1f2a3b4c5d6e",
+  "meta": {
+    "generated_at": "2026-10-02T10:00:00Z",
+    "pipeline_version": "0.1.0",
+    "estimated": true,
+    "disclaimer": "Values are visual estimates from a screen recording, not source CSS."
+  },
+  "source": {
+    "filename": "card-hover.mov",
+    "container": "mov",
+    "codec": "h264",
+    "width": 1440,
+    "height": 900,
+    "duration_ms": 4200,
+    "fps_nominal": 30.0,
+    "fps_effective": 30.0,
+    "is_vfr": false,
+    "pixel_ratio": 1,
+    "pixel_ratio_source": "user",
+    "timing_resolution_ms": 33
+  },
+  "interaction": {
+    "type": "hover",
+    "type_source": "heuristic",
+    "type_confidence": {
+      "value": 0.4,
+      "band": "low"
+    },
+    "pattern": "card",
+    "target_element_id": "e1",
+    "target_label": "Card (e1)",
+    "target_description": null,
+    "trigger": {
+      "kind": "unknown",
+      "reverse_kind": "unknown",
+      "description": "Trigger could not be determined (no cursor visible).",
+      "confidence": {
+        "value": 0.3,
+        "band": "low"
+      }
+    },
+    "direction": "forward",
+    "total_duration_ms": {
+      "forward": 350,
+      "reverse": null
+    }
+  },
+  "elements": [
+    {
+      "id": "e1",
+      "label": "Card (e1)",
+      "label_source": "heuristic",
+      "role": "card",
+      "parent_id": null,
+      "kind": "transform",
+      "bbox_initial": {
+        "x": 560.0,
+        "y": 240.0,
+        "w": 320.0,
+        "h": 400.0
+      },
+      "bbox_active": {
+        "x": 560.0,
+        "y": 232.0,
+        "w": 320.0,
+        "h": 400.0
+      },
+      "text_like": false,
+      "static": {
+        "border_radius_px": {
+          "value": 12.0,
+          "confidence": {
+            "value": 0.45,
+            "band": "low"
+          }
+        },
+        "shadow": {
+          "value": {
+            "x": 0.0,
+            "y": 4.0,
+            "blur": 12.0,
+            "spread": 0.0,
+            "rgba": [
+              0,
+              0,
+              0,
+              0.08
+            ]
+          },
+          "confidence": {
+            "value": 0.4,
+            "band": "low"
+          }
+        }
+      }
+    },
+    {
+      "id": "e2",
+      "label": "Image (e2)",
+      "label_source": "heuristic",
+      "role": "image",
+      "parent_id": "e1",
+      "kind": "transform",
+      "bbox_initial": {
+        "x": 560.0,
+        "y": 240.0,
+        "w": 320.0,
+        "h": 200.0
+      },
+      "bbox_active": {
+        "x": 560.0,
+        "y": 232.0,
+        "w": 320.0,
+        "h": 200.0
+      },
+      "text_like": false,
+      "static": {
+        "border_radius_px": null,
+        "shadow": null
+      }
+    },
+    {
+      "id": "e3",
+      "label": "Text (e3)",
+      "label_source": "heuristic",
+      "role": "text",
+      "parent_id": "e1",
+      "kind": "photometric",
+      "bbox_initial": {
+        "x": 584.0,
+        "y": 468.0,
+        "w": 240.0,
+        "h": 28.0
+      },
+      "bbox_active": {
+        "x": 584.0,
+        "y": 460.0,
+        "w": 240.0,
+        "h": 28.0
+      },
+      "text_like": true,
+      "static": {
+        "border_radius_px": null,
+        "shadow": null
+      }
+    },
+    {
+      "id": "e4",
+      "label": "Icon (e4)",
+      "label_source": "heuristic",
+      "role": "icon",
+      "parent_id": "e1",
+      "kind": "transform",
+      "bbox_initial": {
+        "x": 836.0,
+        "y": 596.0,
+        "w": 20.0,
+        "h": 20.0
+      },
+      "bbox_active": {
+        "x": 840.0,
+        "y": 588.0,
+        "w": 20.0,
+        "h": 20.0
+      },
+      "text_like": false,
+      "static": {
+        "border_radius_px": null,
+        "shadow": null
+      }
+    }
+  ],
+  "segments": [
+    {
+      "id": "fwd",
+      "kind": "forward",
+      "start_ms": 1167,
+      "end_ms": 1547,
+      "onset_ms": 1180,
+      "settle_ms": 1530,
+      "trigger_event_ms": null
+    }
+  ],
+  "transitions": [
+    {
+      "id": "t1",
+      "segment_id": "fwd",
+      "element_id": "e1",
+      "property": "translateY",
+      "from": {
+        "kind": "px",
+        "number": 0.0
+      },
+      "to": {
+        "kind": "px",
+        "number": -8.0
+      },
+      "delta": -8.0,
+      "start_ms": 1180,
+      "delay_ms": 0,
+      "duration_ms": 280,
+      "easing": {
+        "keyword": null,
+        "cubic_bezier": [
+          0.215,
+          0.61,
+          0.355,
+          1.0
+        ],
+        "nearest_named": "easeOutCubic",
+        "family": "ease-out",
+        "rmse": 0.05,
+        "flags": []
+      },
+      "transform_origin": null,
+      "confidence": {
+        "overall": 0.55,
+        "value": 0.62,
+        "timing": 0.6,
+        "easing": 0.45,
+        "band": "medium"
+      },
+      "notes": []
+    },
+    {
+      "id": "t2",
+      "segment_id": "fwd",
+      "element_id": "e1",
+      "property": "box-shadow",
+      "from": {
+        "kind": "shadow",
+        "shadow": {
+          "x": 0.0,
+          "y": 4.0,
+          "blur": 12.0,
+          "spread": 0.0,
+          "rgba": [
+            0,
+            0,
+            0,
+            0.08
+          ]
+        }
+      },
+      "to": {
+        "kind": "shadow",
+        "shadow": {
+          "x": 0.0,
+          "y": 12.0,
+          "blur": 32.0,
+          "spread": 0.0,
+          "rgba": [
+            0,
+            0,
+            0,
+            0.16
+          ]
+        }
+      },
+      "delta": null,
+      "start_ms": 1180,
+      "delay_ms": 0,
+      "duration_ms": 280,
+      "easing": {
+        "keyword": "ease-out",
+        "cubic_bezier": [
+          0.0,
+          0.0,
+          0.58,
+          1.0
+        ],
+        "nearest_named": "ease-out",
+        "family": "ease-out",
+        "rmse": 0.041,
+        "flags": []
+      },
+      "transform_origin": null,
+      "confidence": {
+        "overall": 0.2,
+        "value": 0.25,
+        "timing": 0.3,
+        "easing": 0.15,
+        "band": "low"
+      },
+      "notes": [
+        "estimated, low confidence"
+      ]
+    },
+    {
+      "id": "t3",
+      "segment_id": "fwd",
+      "element_id": "e2",
+      "property": "scale",
+      "from": {
+        "kind": "ratio",
+        "number": 1.0
+      },
+      "to": {
+        "kind": "ratio",
+        "number": 1.06
+      },
+      "delta": 0.06,
+      "start_ms": 1210,
+      "delay_ms": 30,
+      "duration_ms": 320,
+      "easing": {
+        "keyword": null,
+        "cubic_bezier": [
+          0.16,
+          1.0,
+          0.3,
+          1.0
+        ],
+        "nearest_named": "expoOut",
+        "family": "ease-out",
+        "rmse": 0.021,
+        "flags": []
+      },
+      "transform_origin": "center",
+      "confidence": {
+        "overall": 0.25,
+        "value": 0.3,
+        "timing": 0.35,
+        "easing": 0.2,
+        "band": "low"
+      },
+      "notes": [
+        "relative to parent e1"
+      ]
+    },
+    {
+      "id": "t4",
+      "segment_id": "fwd",
+      "element_id": "e3",
+      "property": "color",
+      "from": {
+        "kind": "color",
+        "color": "#111111"
+      },
+      "to": {
+        "kind": "color",
+        "color": "#5252FF"
+      },
+      "delta": null,
+      "start_ms": 1180,
+      "delay_ms": 0,
+      "duration_ms": 200,
+      "easing": {
+        "keyword": "ease",
+        "cubic_bezier": [
+          0.25,
+          0.1,
+          0.25,
+          1.0
+        ],
+        "nearest_named": "ease",
+        "family": "ease",
+        "rmse": 0.024,
+        "flags": []
+      },
+      "transform_origin": null,
+      "confidence": {
+        "overall": 0.42,
+        "value": 0.5,
+        "timing": 0.45,
+        "easing": 0.33,
+        "band": "low"
+      },
+      "notes": []
+    },
+    {
+      "id": "t5",
+      "segment_id": "fwd",
+      "element_id": "e4",
+      "property": "translateX",
+      "from": {
+        "kind": "px",
+        "number": 0.0
+      },
+      "to": {
+        "kind": "px",
+        "number": 4.0
+      },
+      "delta": 4.0,
+      "start_ms": 1260,
+      "delay_ms": 80,
+      "duration_ms": 200,
+      "easing": {
+        "keyword": "ease-out",
+        "cubic_bezier": [
+          0.0,
+          0.0,
+          0.58,
+          1.0
+        ],
+        "nearest_named": "ease-out",
+        "family": "ease-out",
+        "rmse": 0.028,
+        "flags": []
+      },
+      "transform_origin": null,
+      "confidence": {
+        "overall": 0.35,
+        "value": 0.4,
+        "timing": 0.4,
+        "easing": 0.3,
+        "band": "low"
+      },
+      "notes": [
+        "relative to parent e1"
+      ]
+    },
+    {
+      "id": "t6",
+      "segment_id": "fwd",
+      "element_id": "e4",
+      "property": "opacity",
+      "from": {
+        "kind": "ratio",
+        "number": 0.7
+      },
+      "to": {
+        "kind": "ratio",
+        "number": 1.0
+      },
+      "delta": 0.3,
+      "start_ms": 1260,
+      "delay_ms": 80,
+      "duration_ms": 200,
+      "easing": {
+        "keyword": "ease-out",
+        "cubic_bezier": [
+          0.0,
+          0.0,
+          0.58,
+          1.0
+        ],
+        "nearest_named": "ease-out",
+        "family": "ease-out",
+        "rmse": 0.035,
+        "flags": []
+      },
+      "transform_origin": null,
+      "confidence": {
+        "overall": 0.28,
+        "value": 0.3,
+        "timing": 0.3,
+        "easing": 0.25,
+        "band": "low"
+      },
+      "notes": []
+    }
+  ],
+  "relationships": [
+    {
+      "kind": "simultaneous",
+      "segment_id": "fwd",
+      "transition_ids": [
+        "t1",
+        "t2",
+        "t4"
+      ],
+      "offset_ms": 0,
+      "interval_ms": null
+    },
+    {
+      "kind": "delayed",
+      "segment_id": "fwd",
+      "transition_ids": [
+        "t1",
+        "t3"
+      ],
+      "offset_ms": 30,
+      "interval_ms": null
+    },
+    {
+      "kind": "delayed",
+      "segment_id": "fwd",
+      "transition_ids": [
+        "t1",
+        "t5",
+        "t6"
+      ],
+      "offset_ms": 80,
+      "interval_ms": null
+    }
+  ],
+  "cursor": {
+    "visible": false,
+    "confidence": 0.0,
+    "events": []
+  },
+  "structure": [
+    "image",
+    "text",
+    "icon"
+  ],
+  "interpretation": {
+    "provider": "none",
+    "model": null,
+    "status": "disabled",
+    "duration_ms": null
+  },
+  "warnings": [
+    {
+      "code": "cursor_not_visible",
+      "severity": "warn",
+      "message": "No cursor was visible; the trigger is inferred from the motion only."
+    },
+    {
+      "code": "reverse_not_recorded",
+      "severity": "info",
+      "message": "Only the forward motion was recorded; reverse timings are not measured."
+    }
+  ],
+  "initial_state": {
+    "e1": {
+      "translateY": {
+        "kind": "px",
+        "number": 0.0
+      },
+      "box-shadow": {
+        "kind": "shadow",
+        "shadow": {
+          "x": 0.0,
+          "y": 4.0,
+          "blur": 12.0,
+          "spread": 0.0,
+          "rgba": [
+            0,
+            0,
+            0,
+            0.08
+          ]
+        }
+      }
+    },
+    "e2": {
+      "scale": {
+        "kind": "ratio",
+        "number": 1.0
+      }
+    },
+    "e3": {
+      "color": {
+        "kind": "color",
+        "color": "#111111"
+      }
+    },
+    "e4": {
+      "translateX": {
+        "kind": "px",
+        "number": 0.0
+      },
+      "opacity": {
+        "kind": "ratio",
+        "number": 0.7
+      }
+    }
+  },
+  "active_state": {
+    "e1": {
+      "translateY": {
+        "kind": "px",
+        "number": -8.0
+      },
+      "box-shadow": {
+        "kind": "shadow",
+        "shadow": {
+          "x": 0.0,
+          "y": 12.0,
+          "blur": 32.0,
+          "spread": 0.0,
+          "rgba": [
+            0,
+            0,
+            0,
+            0.16
+          ]
+        }
+      }
+    },
+    "e2": {
+      "scale": {
+        "kind": "ratio",
+        "number": 1.06
+      }
+    },
+    "e3": {
+      "color": {
+        "kind": "color",
+        "color": "#5252FF"
+      }
+    },
+    "e4": {
+      "translateX": {
+        "kind": "px",
+        "number": 4.0
+      },
+      "opacity": {
+        "kind": "ratio",
+        "number": 1.0
+      }
+    }
+  }
+}

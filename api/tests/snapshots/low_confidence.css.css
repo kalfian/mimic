@@ -1,0 +1,40 @@
+/* Suggested implementation — estimated from a screen recording, not the original CSS. */
+/* All values are approximate; display scale 1x as set on upload. */
+/* Trigger could not be determined; implemented as hover. */
+/* Reverse not recorded: base rules reuse the forward timings. */
+
+.card {
+  border-radius: 12px; /* estimated, low confidence */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); /* estimated, low confidence */
+  transition: translate 280ms ease-out;
+}
+
+.card:hover {
+  translate: 0 -8px;
+  transition: translate 280ms ease-out;
+  /* uncertain (20% confidence), omitted: box-shadow 0 12px 32px rgba(0, 0, 0, 0.16), 280ms */
+}
+
+.card:hover .card__image {
+  /* uncertain (25% confidence), omitted: scale 1.06, 320ms */
+}
+
+.card__text {
+  color: #111111; /* low confidence */
+  transition: color 200ms ease;
+}
+
+.card:hover .card__text {
+  color: #5252FF; /* low confidence */
+  transition: color 200ms ease;
+}
+
+.card__icon {
+  transition: translate 200ms ease-out 80ms;
+}
+
+.card:hover .card__icon {
+  translate: 4px 0; /* low confidence */
+  transition: translate 200ms ease-out 80ms;
+  /* uncertain (28% confidence), omitted: opacity 1, 200ms */
+}
