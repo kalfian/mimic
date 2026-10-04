@@ -17,6 +17,13 @@ device resolution (``CSS px * pixel_ratio``):
 * ``clip_h`` = visible height in CSS px (``height`` animation with clipped content).
 * ``shadow`` = one ``box-shadow`` layer ``(x, y, blur, spread, alpha)``, black, drawn below the
   node from its own coverage (Gaussian σ = blur / 2), transformed with the node.
+* ``Scene.drivers`` (PLAN-continuous §8.1) = per-node ``t -> (translateX, translateY)``
+  functions (velocity-integrated scroller tracks, ``tests/synth/kinematics.py``) that override
+  the node's base ``tx``/``ty``; a driver may return a third value, ``scale`` (P2b: cards that
+  grow towards the scroller edges). A scene without drivers renders exactly as before (same
+  frame dedup keys, same pixels).
+* ``Node.tone`` scales an image node's procedural texture (``< 1`` = a dark photo); the
+  default 1.0 leaves every texture unchanged.
 
 Colors in the public API are ``(r, g, b)``; frames are BGR ``uint8``.
 """
@@ -24,7 +31,7 @@ Colors in the public API are ``(r, g, b)``; frames are BGR ``uint8``.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -100,6 +107,7 @@ class Node:
     weight: float = 1.0
     # image / icon
     seed: int = 0
+    tone: float = 1.0  # image: texture multiplier (< 1 = darker photo)
     points: tuple[tuple[float, float], ...] = ()  # icon polygon, normalized to the box
     # structure / behaviour
     children: list[Node] = field(default_factory=list)
@@ -129,6 +137,11 @@ class Node:
             yield from c.walk()
 
 
+#: ``t -> (translateX, translateY)`` or ``(translateX, translateY, scale)`` in CSS px
+#: (overrides the node's base ``tx``/``ty`` and, with a third value, ``scale``).
+Driver = Callable[[float], tuple[float, ...]]
+
+
 @dataclass
 class Scene:
     """Everything needed to render one scenario (CSS px, seconds)."""
@@ -141,6 +154,7 @@ class Scene:
     timeline: Timeline
     cursor: CursorPath | None
     duration_s: float
+    drivers: dict[str, Driver] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.timeline.validate()
@@ -155,6 +169,13 @@ class Scene:
                 raise ValueError(f"tween targets static node {tw.node!r}")
             if tw.prop not in PROP_ATTR:
                 raise ValueError(f"unsupported animated property {tw.prop!r}")
+            if tw.node in self.drivers and tw.prop in ("translateX", "translateY", "scale"):
+                raise ValueError(f"node {tw.node!r} is driven; it cannot also tween {tw.prop}")
+        for node_id in self.drivers:
+            if node_id not in self._index:
+                raise ValueError(f"driver targets unknown node {node_id!r}")
+            if node_id in static_ids:
+                raise ValueError(f"driver targets static node {node_id!r}")
 
     def _register(self, node: Node, ancestors: tuple[Node, ...]) -> None:
         if node.id in self._index:
@@ -169,6 +190,12 @@ class Scene:
     # ---- animated values ----------------------------------------------------------------
 
     def value(self, node: Node, attr: str, t: float) -> AnimValue | None:
+        if attr in ("tx", "ty") and node.id in self.drivers:
+            return float(self.drivers[node.id](t)[0 if attr == "tx" else 1])
+        if attr == "scale" and node.id in self.drivers:
+            out = self.drivers[node.id](t)
+            if len(out) > 2:
+                return float(out[2])
         props = [p for p, a in PROP_ATTR.items() if a == attr]
         base = getattr(node, attr)
         for p in props:
@@ -231,7 +258,13 @@ class Scene:
         if self.cursor is not None and self.cursor.visible:
             x, y = self.cursor.position(t)
             cur = (round(x, 4), round(y, 4), self.cursor_style(t))
-        return (vals, cur)
+        if not self.drivers:
+            return (vals, cur)  # unchanged key shape for scenes without drivers
+        drv = tuple(
+            (node_id, tuple(float(v) for v in fn(t)))
+            for node_id, fn in sorted(self.drivers.items())
+        )
+        return (vals, cur, drv)
 
     def cursor_style(self, t: float) -> str:
         assert self.cursor is not None
@@ -361,6 +394,8 @@ def _texture(node: Node, W: int, H: int, r: float) -> np.ndarray:
         a = cv2.resize(layer.astype(np.float32) / 255.0, (W, H), interpolation=cv2.INTER_AREA)
         a = a[..., None] * 0.85
         img = img * (1 - a) + np.array(col, np.float32) * a
+    if node.tone != 1.0:
+        img = img * np.float32(node.tone)
     return np.clip(img, 0, 255).astype(np.float32)
 
 

@@ -63,15 +63,26 @@ from app.models.ir import (
 )
 from app.models.measure import (
     ClassifyFeatures,
+    ContinuousMeasurement,
     CursorTrack,
     ElementCandidate,
     FittedTransition,
     ProbeInfo,
     PropertySeries,
     Rect,
+    RegimeReport,
     Scale,
+    ScrollerAnalysis,
 )
 from app.pipeline import assemble as asm
+from app.pipeline.appearance import (
+    AppearanceElement,
+    AppearanceImage,
+    ElementAppearance,
+    elements_from_candidates,
+    measure_appearance,
+    outer_ring_color,
+)
 from app.pipeline.assemble import Measurement, SegmentWindow, warning
 from app.pipeline.classify import classify, cursor_features
 from app.pipeline.confidence import (
@@ -80,6 +91,23 @@ from app.pipeline.confidence import (
     static_confidence,
     transition_confidence,
 )
+from app.pipeline.continuous.assemble import (
+    SCROLLER_ID,
+    continuous_heuristic,
+    interpretation_input_continuous,
+)
+from app.pipeline.continuous.layout import CensusCard, ScrollerLayout, detect_layout
+from app.pipeline.continuous.measure import analyse_ambient
+from app.pipeline.continuous.pointer import occlusion_corrected
+from app.pipeline.continuous.regime import (
+    ModeDecision,
+    apply_ambient_mask,
+    decide_mode,
+    detect_regime,
+    merge_row_pieces,
+    scan_for_regime,
+)
+from app.pipeline.cursor import build_cursor_track
 from app.pipeline.debug import DebugDump
 from app.pipeline.decode import (
     clipped_sides,
@@ -90,7 +118,14 @@ from app.pipeline.decode import (
     plan_windows,
 )
 from app.pipeline.easing import eval_curve
-from app.pipeline.keyframes import KeyframeFile, write_keyframes
+from app.pipeline.keyframes import (
+    KeyframeFile,
+    css_to_img,
+    grab_frame,
+    keyframe_size,
+    write_continuous_keyframes,
+    write_keyframes,
+)
 from app.pipeline.params import DEFAULT_PARAMS, MeasureParams
 from app.pipeline.persist import (
     MEASUREMENT_FILE,
@@ -103,7 +138,7 @@ from app.pipeline.preview import make_preview
 from app.pipeline.probe import probe, probe_to_json, probe_warnings, resolve_scale
 from app.pipeline.radius import measure_radii
 from app.pipeline.regions import detect_elements, soft_change_mask, state_frames
-from app.pipeline.scan import scan_video
+from app.pipeline.scan import Pass1Stats, ambient_mask_rects, masked_cursor_track, pass1_stats
 from app.pipeline.shadow import measure_shadows
 from app.pipeline.timing import (
     TimingFit,
@@ -191,6 +226,13 @@ class KeyframePlan:
     state_a_s: float
     state_b_s: float
     mid_s: dict[int, float] = field(default_factory=dict)
+    #: Full state-A frame at ``keyframes.keyframe_size`` (grabbed for the appearance stage and
+    #: reused for ``state_a.png``); None = grab it when writing the keyframes.
+    state_a_img: np.ndarray | None = None
+    #: Continuous mode: phase midpoints (s) and the boxes drawn on ``annotated_a.png``.
+    continuous: bool = False
+    phase_s: list[float] = field(default_factory=list)
+    boxes: list[tuple[str, Rect]] = field(default_factory=list)
 
 
 def _finite_xy(x: float, y: float) -> bool:
@@ -536,6 +578,199 @@ class MeasureOutput:
     keyframe_plan: KeyframePlan
 
 
+# --------------------------------------------------------------------------------------------
+# Continuous mode (PLAN-continuous §4.7, §9 P2)
+# --------------------------------------------------------------------------------------------
+
+#: Element ids of the card / title found inside the scroller (appearance, §13).
+CARD_ID = "e2"
+TITLE_ID = "e3"
+#: Confidence cap of the gap derived from the card box found in a still frame.
+LAYOUT_GAP_CONF = 0.7
+
+
+def rest_time(sa: ScrollerAnalysis) -> float:
+    """A still moment for ``state_a`` / appearance: the middle of the longest ``paused`` phase,
+    else just after the start of the analysed span (autoplay is slow; drags blur)."""
+    paused = [p for p in sa.phases if p.kind == "paused"]
+    if paused:
+        p = max(paused, key=lambda p: p.end_s - p.start_s)
+        return (p.start_s + p.end_s) / 2
+    assert sa.series is not None
+    t0, t1 = float(sa.series.times[0]), float(sa.series.times[-1])
+    return min(t0 + 0.05, (t0 + t1) / 2)
+
+
+def continuous_cursor_summary(cursor: CursorTrack, events: list[CursorEvent]) -> str:
+    """Words-only cursor summary for Layer B (the scroller is always the target)."""
+    if not cursor.visible:
+        return f"cursor not visible; scroller {SCROLLER_ID}"
+    parts = [
+        f"{'enters' if ev.kind == 'enter' else 'leaves'} {SCROLLER_ID} at {ev.t_ms} ms"
+        for ev in events
+        if ev.kind in ("enter", "leave")
+    ]
+    return "; ".join(parts) or f"stays outside scroller {SCROLLER_ID}"
+
+
+def layout_candidates(layout: ScrollerLayout) -> list[ElementCandidate]:
+    """Card / title boxes as element candidates (children of the scroller)."""
+    out: list[ElementCandidate] = []
+    if layout.card is not None:
+        out.append(ElementCandidate(CARD_ID, layout.card, layout.card, SCROLLER_ID,
+                                    "transform", 0.0))  # fmt: skip
+        if layout.text is not None:
+            out.append(ElementCandidate(TITLE_ID, layout.text, layout.text, CARD_ID,
+                                        "transform", 0.0, text_like=True))  # fmt: skip
+    return out
+
+
+def dump_regime(
+    dump: DebugDump,
+    stats: Pass1Stats,
+    regime: RegimeReport,
+    scrollers: list[ScrollerAnalysis],
+    decision: ModeDecision,
+) -> None:
+    """Debug dumps: activity grid (lead fraction image + per-frame active cells), regime,
+    displacement series and phases of every analysed region."""
+    if not dump.enabled:
+        return
+    from app.pipeline.debug import scroller_json
+
+    if stats.activity is not None and len(stats.activity):
+        act = stats.activity
+        dump.image("activity_mean", (act.mean(axis=0) * 255).astype(np.uint8))
+        rows = [[f"{t:.4f}", int(a.sum())] for t, a in zip(stats.times, act, strict=True)]
+        dump.write_csv("activity.csv", ["t_s", "active_cells"], rows)
+    dump.write_json("regime.json", {
+        "mode": decision.mode,
+        "extra_scrollers": decision.extra_scrollers,
+        "lead_window_s": list(regime.lead_window_s),
+        "grid_shape": list(regime.grid_shape),
+        "ambient": [{"rect_css": [a.rect_css.x, a.rect_css.y, a.rect_css.w, a.rect_css.h],
+                     "cells": a.cells, "lead_frac": round(a.lead_frac, 4)}
+                    for a in regime.ambient],
+        "warnings": [w.model_dump() for w in decision.warnings],
+    })  # fmt: skip
+    for i, sa in enumerate(scrollers, start=1):
+        dump.write_json(f"scroller_{i}.json", scroller_json(sa))
+        if sa.series is not None:
+            ser = sa.series
+            rows = [
+                [f"{t:.5f}", f"{x:.4f}", f"{q:.4f}"]
+                for t, x, q in zip(ser.times, ser.pos, ser.quality, strict=True)
+            ]
+            dump.write_csv(f"displacement_{i}.csv", ["t_s", "pos_css", "quality"], rows)
+
+
+def _same_box(a: Rect, b: Rect, tol: float = 1.0) -> bool:
+    return max(abs(a.x - b.x), abs(a.y - b.y), abs(a.x2 - b.x2), abs(a.y2 - b.y2)) <= tol
+
+
+def measure_continuous(
+    video: Path,
+    info: ProbeInfo,
+    scale: Scale,
+    warnings: list[SpecWarning],
+    decision: ModeDecision,
+    regime: RegimeReport,
+    cursor: CursorTrack,
+    *,
+    params: MeasureParams,
+    progress: Progress,
+    ffmpeg_bin: str,
+    dump: DebugDump,
+) -> MeasureOutput:
+    """Continuous ``Measurement`` for the scroller chosen by ``decide_mode``.
+
+    Phases / behaviour come from ``analyse_ambient``; here: heuristic interaction (always
+    heuristic in continuous mode), cursor events relative to the scroller, the card / title
+    layout and measured appearance from one rest frame, and the keyframe plan.
+    """
+    sa = decision.scroller
+    assert sa is not None and sa.series is not None and sa.axis is not None
+    progress.enter(Stage.MEASURING)
+    fw, fh = frame_size_css(info, scale)
+    region = sa.series.region
+    a_s = rest_time(sa)
+    page = grab_frame(video, a_s, keyframe_size(info, params), ffmpeg_bin)
+    k_img = css_to_img(info, scale, params)
+    census = (
+        CensusCard(sa.card_len_px, sa.card_cross_px, sa.card_zoom_per_px2)
+        if sa.card_len_px is not None and sa.card_cross_px is not None
+        else None
+    )
+    band = region
+    layout = detect_layout(page, k_img, region, sa.axis, sa.pitch_px, sa.gap_px, census)
+    if layout.viewport is not None:
+        # the moving band only covers the cards; the overflow box is the band plus the visible
+        # track background around it (continuous.region, the scroller element box)
+        region = sa.series.region = layout.viewport
+    if layout.card is not None and sa.pitch_px is not None and census is None:
+        # the gap read off a still frame (pitch − card length) beats the panorama's estimate,
+        # which blurred / compressed frames widen (C9: 31 px for 16); the census measured its
+        # gap directly (and its pitch is card + gap by construction when the cards scale)
+        card_len = layout.card.w if sa.axis == "x" else layout.card.h
+        gap = sa.pitch_px - card_len
+        if 0.0 < gap < 0.5 * sa.pitch_px:
+            sa.gap_px = round(gap, 1)
+            sa.gap_confidence = min(sa.pitch_confidence, LAYOUT_GAP_CONF)
+    cards = layout_candidates(layout)
+    appearance = measure_appearance(
+        AppearanceImage(page, (0.0, 0.0), k_img),
+        [AppearanceElement(SCROLLER_ID, region, "scroller"), *elements_from_candidates(cards)],
+        (fw, fh),
+    )
+    if _same_box(region, band):
+        # no visible track around the cards: the box is the moving band itself, whose inner
+        # ring is card pixels; the track then shows only between / around the cards, in the
+        # page's colour -> sample just outside the band (acceptance run: flat cards read as
+        # the scroller's background)
+        outside = outer_ring_color(AppearanceImage(page, (0.0, 0.0), k_img), band)
+        if outside is not None:
+            el = appearance.elements.get(SCROLLER_ID, ElementAppearance())
+            appearance.elements[SCROLLER_ID] = replace(el, background=outside)
+    progress.update(0.5)
+
+    progress.enter(Stage.FITTING)
+    hidden = ambient_mask_rects([sa.region], (fw, fh), params)
+    if hidden and cursor.visible:
+        cursor = replace(cursor, samples=occlusion_corrected(cursor.samples, region, hidden[0]))
+    events = cursor_events(cursor, SCROLLER_ID, region)
+    m = Measurement(
+        probe=info,
+        scale=scale,
+        frame_css=(fw, fh),
+        direction="continuous",
+        segments=[],
+        elements=cards,
+        transitions=[],
+        heuristic=continuous_heuristic(sa),
+        target_id=SCROLLER_ID,
+        cursor_visible=cursor.visible,
+        cursor_confidence=cursor.confidence,
+        cursor_events=events,
+        cursor_summary=continuous_cursor_summary(cursor, events),
+        warnings=list(warnings) + list(decision.warnings),
+        timing_resolution_ms=timing_resolution_ms(sa.series.times),
+        continuous=ContinuousMeasurement(regime, sa, decision.extra_scrollers),
+    )
+    asm.apply_appearance(m, appearance, params)
+    boxes = [(SCROLLER_ID, region)] + [(c.id, c.bbox_a) for c in cards]
+    plan = KeyframePlan(
+        a_s, a_s, state_a_img=page, continuous=True, boxes=boxes,
+        phase_s=[(p.start_s + p.end_s) / 2 for p in sa.phases],
+    )  # fmt: skip
+    if dump.enabled:
+        dump.write_json("layout.json", {
+            "rest_s": round(a_s, 4),
+            "boxes": {eid: [round(r.x, 2), round(r.y, 2), round(r.w, 2), round(r.h, 2)]
+                      for eid, r in boxes},
+        })  # fmt: skip
+    return MeasureOutput(m, plan)
+
+
 def measure(
     video: Path,
     info: ProbeInfo,
@@ -551,10 +786,44 @@ def measure(
     dump = DebugDump(debug_dir)
     warnings = list(warnings)
 
-    # A2 — pass 1
+    # A2 — pass 1, regime (PLAN-continuous §3): no ambient region -> the transition path,
+    # unchanged; ambient regions -> scroller analysis + §3.3 decision
     progress.enter(Stage.SCANNING)
-    scan, stats = scan_video(video, info, scale, params, ffmpeg_bin)
+    stats = pass1_stats(video, info, scale, params, ffmpeg_bin)
+    raw_cursor, _ = build_cursor_track(stats.blobs, stats.times, params)
+    regime = detect_regime(stats, params, raw_cursor)
+    scanned = scan_for_regime(stats, scale, params, regime)
+    decision: ModeDecision | None = None
+    if regime.has_ambient:
+        progress.enter(Stage.DECODING)
+        # the pointer is only trackable outside moving content (scan.masked_cursor_track)
+        raw_cursor = masked_cursor_track(stats, regime.ambient, params)
+        scrollers = analyse_ambient(video, info, scale, regime, params, cursor=raw_cursor,
+                                    ffmpeg_bin=ffmpeg_bin)  # fmt: skip
+        merged = merge_row_pieces(regime, scrollers, frame_size_css(info, scale))
+        if merged is not None:
+            # flat cards split one scroller row into pieces (regime.merge_row_pieces): analyse
+            # the row as a whole (the masked pointer track depends on the regions, too)
+            regime = merged
+            scanned = scan_for_regime(stats, scale, params, regime)
+            raw_cursor = masked_cursor_track(stats, regime.ambient, params)
+            scrollers = analyse_ambient(video, info, scale, regime, params, cursor=raw_cursor,
+                                        ffmpeg_bin=ffmpeg_bin)  # fmt: skip
+        decision = decide_mode(regime, scrollers, scanned, frame_size_css(info, scale), params)
+        dump_regime(dump, stats, regime, scrollers, decision)
+        if decision.mode == "continuous":
+            return measure_continuous(video, info, scale, warnings, decision, regime, raw_cursor,
+                                      params=params, progress=progress, ffmpeg_bin=ffmpeg_bin,
+                                      dump=dump)  # fmt: skip
+        assert decision.scan is not None
+        scan = decision.scan
+    elif isinstance(scanned, PipelineError):
+        raise scanned
+    else:
+        scan = scanned
     warnings += scan.warnings
+    if decision is not None:
+        warnings += decision.warnings
     prim = scan.primary
     cursor = scan.cursor
 
@@ -571,8 +840,10 @@ def measure(
                                   ffmpeg_bin=ffmpeg_bin)  # fmt: skip
         return wfs_, w_
 
+    masked = decision.masked if decision is not None else []
     wfs, w = decode()
     warnings += w
+    apply_ambient_mask(wfs, masked, params)  # no-op without ambient regions
     fwd_wf = wfs[0]
     st = state_frames(fwd_wf, prim.forward.start_s, prim.forward.end_s, params,
                       round_trip=prim.round_trip)  # fmt: skip
@@ -581,6 +852,7 @@ def measure(
     if sides:
         crop_css, crop_px = expand_crop(crop_css, sides, info, scale, params)
         wfs, _ = decode()
+        apply_ambient_mask(wfs, masked, params)
         fwd_wf = wfs[0]
         st = state_frames(fwd_wf, prim.forward.start_s, prim.forward.end_s, params,
                           round_trip=prim.round_trip)  # fmt: skip
@@ -755,6 +1027,17 @@ def measure(
         x = float(xs[idx[0]]) if idx.size else pct / 100
         mid[pct] = pt.t0_s + x * pt.duration_s
 
+    # measured appearance (PLAN-continuous §13): elements from the pass-2 state-A crop, page
+    # background from the full state-A frame (also reused for ``state_a.png``)
+    kf_size = keyframe_size(info, params)
+    page = grab_frame(video, a_s, kf_size, ffmpeg_bin)
+    appearance = measure_appearance(
+        AppearanceImage(st.a, (crop_css.x, crop_css.y), scale.k, st.valid),
+        elements_from_candidates(rr.elements),
+        (fw, fh),
+        page_image=AppearanceImage(page, (0.0, 0.0), css_to_img(info, scale, params)),
+    )
+
     dt_frames = fwd_wf.times[~fwd_wf.is_dup] if fwd_wf.is_dup.any() else fwd_wf.times
     m = Measurement(
         probe=info,
@@ -774,6 +1057,7 @@ def measure(
         warnings=warnings,
         timing_resolution_ms=timing_resolution_ms(dt_frames),
     )
+    asm.apply_appearance(m, appearance, params)
 
     if dump.enabled:
         from app.pipeline.debug import element_json, series_json
@@ -794,7 +1078,7 @@ def measure(
                           "rule": heuristic.rule, "confidence": heuristic.confidence},
             "target": target_id,
         })  # fmt: skip
-    return MeasureOutput(m, KeyframePlan(a_s, b_s, mid))
+    return MeasureOutput(m, KeyframePlan(a_s, b_s, mid, state_a_img=page))
 
 
 # --------------------------------------------------------------------------------------------
@@ -830,7 +1114,10 @@ def run_interpreter(
     expected_s: float,
 ) -> InterpretationResult:
     """Layer B on a finished measurement. ``keyframes`` maps artifact names to PNG paths."""
-    inp = asm.interpretation_input(m, job_dir, keyframes)
+    if m.continuous is not None:
+        inp = interpretation_input_continuous(m, job_dir, keyframes)
+    else:
+        inp = asm.interpretation_input(m, job_dir, keyframes)
     if isinstance(interpreter, FallbackInterpreter):
         return interpreter.interpret(inp)
     with progress.creeping(expected_s):
@@ -874,9 +1161,18 @@ def analyze(
     kfs: list[KeyframeFile] = []
     if keyframes_dir is not None:
         plan = out.keyframe_plan
-        kfs = write_keyframes(video, keyframes_dir, info, scale, state_a_s=plan.state_a_s,
-                              state_b_s=plan.state_b_s, mid_s=plan.mid_s, elements=m.elements,
-                              params=params, ffmpeg_bin=settings.ffmpeg_bin)  # fmt: skip
+        if plan.continuous:
+            kfs = write_continuous_keyframes(
+                video, keyframes_dir, info, scale, state_a_s=plan.state_a_s,
+                phase_s=plan.phase_s, boxes=plan.boxes, params=params,
+                ffmpeg_bin=settings.ffmpeg_bin, state_a_img=plan.state_a_img,
+            )  # fmt: skip
+        else:
+            kfs = write_keyframes(video, keyframes_dir, info, scale, state_a_s=plan.state_a_s,
+                                  state_b_s=plan.state_b_s, mid_s=plan.mid_s,
+                                  elements=m.elements, params=params,
+                                  ffmpeg_bin=settings.ffmpeg_bin,
+                                  state_a_img=plan.state_a_img)  # fmt: skip
 
     progress.enter(Stage.INTERPRETING)
     if interpreter is None:

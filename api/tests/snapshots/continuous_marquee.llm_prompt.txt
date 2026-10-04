@@ -1,0 +1,38 @@
+Recreate the reference UI motion, a continuously moving horizontal marquee, as a single self-contained, responsive HTML file, as follows.
+
+STRUCTURE
+
+Create a horizontal marquee: a viewport (the scroller) that clips a track holding one row of placeholder cards.
+- The cards sit side by side at a constant spacing: pitch ≈216 px (medium confidence), one card plus the gap to the next.
+- Repeat the cards once (two identical copies back to back) so the track can wrap seamlessly; one copy must be at least as wide as the scroller.
+- Each card contains: text.
+- The motion runs along the horizontal axis only.
+
+APPEARANCE (measured, approximate)
+
+- Recorded viewport: 1280×800 px; page background #FAFAFA.
+- Scroller: ≈760×200 px (medium confidence), top-left corner at x 260, y 300 of the recorded viewport (horizontally and vertically centred); background #F1F1F4 (medium confidence).
+- Cards: ≈200×160 px each, vertically centred in the scroller; gap ≈16 px (medium confidence); background #FFFFFF (medium confidence); corner radius possibly ≈12 px (low confidence).
+- Card text: colour #1A1A1A (medium confidence); font size possibly ≈16 px (low confidence); placed in the lower part of the card.
+Match these sizes, colours and positions at the recorded viewport size; all content stays placeholder.
+
+BEHAVIOUR
+
+1. Autoplay: the track moves continuously to the left at ≈240 px/s with constant (linear) velocity and loops seamlessly: one copy of the cards is ≈864 px long and one loop takes ≈3600 ms.
+
+OUTPUT
+
+Build this as one self-contained, responsive HTML file named index.html: the markup, one <style> block and, only if the motion needs it, one inline <script>. No frameworks, CDNs, external fonts, external images or build step; the file must work when opened directly in a browser.
+
+- Content: build only the structure above, with neutral placeholders instead of real images or copy: images as a solid or gradient block with a fixed aspect-ratio, text as short role-named or lorem-style text (for example "Title", "Description"), icons as a simple inline SVG. Do not add UI beyond what is needed to demonstrate the motion.
+- Layout: mobile-first and fluid, working from 320px wide phones to wide desktops, with the standard responsive <meta name="viewport"> tag. At the recorded viewport size keep the measured sizes, colours and the scroller's position from APPEARANCE (place its top-left corner exactly there, e.g. with the page's padding or margins; do not centre it unless APPEARANCE says it is centred); below that width the scroller may span the full width while the cards keep their measured size. Keep every motion value above as specified in CSS px, px/s and ms: they are measured design values, so do not scale them with the viewport.
+- Motion: a CSS @keyframes animation on the track is enough: translate it by exactly one copy of the cards per loop, linear, infinite, so the wrap is invisible.
+- Focus and visibility: make the scroller keyboard-focusable with an aria-label and pause autoplay only while it has keyboard focus (:focus-visible), not after a pointer press or drag; pause while the tab is hidden (visibilitychange) and reset the frame clock when it becomes visible so the track does not jump.
+- Reduced motion: under prefers-reduced-motion: reduce, do not autoplay at all (the track starts and stays still).
+- Semantics: use semantic elements (a section with an aria-label for the scroller, a list or articles for the cards, headings, p) and mark decorative placeholders with aria-hidden="true".
+
+CONSTRAINTS
+
+All numbers are estimates measured from a screen recording (display scale assumed 1x); keep them as targets, not exact source values.
+The pointer was not visible in the recording; what starts and stops the motion is inferred from the motion alone.
+Do not invent additional motion or behaviours that are not described above.

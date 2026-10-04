@@ -7,6 +7,9 @@ level easing-family rate (≥ 80 % of eligible transitions).
 
 Only runs with ``pytest -m synth`` (``make eval`` runs the same checks via
 ``scripts/eval_synth.py`` and prints the full tables). Needs ``make synth`` first.
+
+PLAN-continuous scenarios (C1–C12, N1) are judged against §8.4 since P2 (``evaluate.is_pending``
+is false for every scenario now), including their confidence calibration.
 """
 
 from __future__ import annotations
@@ -18,13 +21,21 @@ from pathlib import Path
 import pytest
 
 from app.config import REPO_ROOT
-from tests.synth.evaluate import Report, compare, format_report, format_summary, load_ir, summarize
+from tests.synth.evaluate import (
+    Report,
+    compare,
+    format_report,
+    format_summary,
+    is_pending,
+    load_ir,
+    summarize,
+)
 from tests.synth.truth import Truth
 
 pytestmark = pytest.mark.synth
 
 SYNTH_DIR = REPO_ROOT / "data" / "synth"
-TRUTHS = sorted(SYNTH_DIR.glob("*.truth.json"))
+TRUTHS = [t for t in sorted(SYNTH_DIR.glob("*.truth.json")) if not is_pending(Truth.load(t))]
 
 
 def _analyze(truth_path: str) -> tuple[str, dict]:
@@ -60,4 +71,7 @@ def test_suite_thresholds(reports: dict[str, Report]) -> None:
     assert summary.ok, format_summary(summary)
     # calibration: transitions reported with high confidence are within every target ≥ 90 %
     ok, n = summary.calibration["high"]
+    assert n == 0 or ok / n >= 0.9, format_summary(summary)
+    # PLAN-continuous §9 P2: continuous values reported with high confidence likewise
+    ok, n = summary.continuous_calibration["high"]
     assert n == 0 or ok / n >= 0.9, format_summary(summary)

@@ -139,6 +139,119 @@
       "title": "AuthStatus",
       "type": "object"
     },
+    "Autoplay": {
+      "additionalProperties": false,
+      "description": "Constant-velocity autoplay before any interaction.",
+      "properties": {
+        "direction": {
+          "enum": [
+            "left",
+            "right",
+            "up",
+            "down"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "speed_px_s": {
+          "$ref": "#/$defs/MeasuredNumber",
+          "description": "|velocity|, CSS px/s (> 0)."
+        },
+        "velocity_px_s": {
+          "description": "Signed velocity; same magnitude as speed_px_s.",
+          "title": "Velocity Px S",
+          "type": "number"
+        },
+        "easing": {
+          "const": "linear",
+          "default": "linear",
+          "title": "Easing",
+          "type": "string"
+        },
+        "loop": {
+          "$ref": "#/$defs/LoopInfo"
+        }
+      },
+      "required": [
+        "direction",
+        "speed_px_s",
+        "velocity_px_s",
+        "easing",
+        "loop"
+      ],
+      "title": "Autoplay",
+      "type": "object"
+    },
+    "Behavior": {
+      "additionalProperties": false,
+      "description": "What the generators print; each value aggregated over phase instances. null = not seen.",
+      "properties": {
+        "pause": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PauseBehavior"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "drag": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DragBehavior"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "inertia": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InertiaBehavior"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "snap": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SnapBehavior"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "resume": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResumeBehavior"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "pause",
+        "drag",
+        "inertia",
+        "snap",
+        "resume"
+      ],
+      "title": "Behavior",
+      "type": "object"
+    },
     "Box": {
       "additionalProperties": false,
       "description": "Axis-aligned rectangle in CSS px, full-frame coordinates (x, y = top-left).",
@@ -169,6 +282,55 @@
         "h"
       ],
       "title": "Box",
+      "type": "object"
+    },
+    "CardScale": {
+      "additionalProperties": false,
+      "description": "Cards scale with their on-screen distance from the scroller centre (a position-driven\ntransform updated every frame; PLAN-continuous P2c).\n\n``scale(d) = 1 + (scale_at_reference - 1) · (d / reference_distance_px)²`` where ``d`` is\nthe distance (CSS px, along the axis) of a card's centre from the scroller centre: 1 at the\ncentre, so the card element box, ``pitch_px`` and ``gap_px`` describe the card at the\ncentre. ``reference_distance_px`` is the farthest whole card measured (the curve beyond is\nan extrapolation). The cards stay packed — the gaps keep their size — so neighbours move\napart as they grow.\n\nSpeeds and displacements in the ``continuous`` section are on-screen values; on average over\nthe scroller the content is magnified ``mean_scale`` times (``1 + (scale_at_reference - 1)\n· (half / reference_distance_px)² / 3``, half = half the region length along the axis),\nso an unscaled track moves at ``speed / mean_scale``. Stored so outputs can quote it.",
+      "properties": {
+        "model": {
+          "const": "quadratic",
+          "default": "quadratic",
+          "title": "Model",
+          "type": "string"
+        },
+        "origin": {
+          "const": "scroller_center",
+          "default": "scroller_center",
+          "title": "Origin",
+          "type": "string"
+        },
+        "reference_distance_px": {
+          "description": "Farthest measured card-centre distance from the scroller centre.",
+          "exclusiveMinimum": 0,
+          "title": "Reference Distance Px",
+          "type": "number"
+        },
+        "scale_at_reference": {
+          "description": "Card scale at reference_distance_px.",
+          "exclusiveMinimum": 1,
+          "title": "Scale At Reference",
+          "type": "number"
+        },
+        "mean_scale": {
+          "description": "Mean on-screen magnification over the scroller (speed conversion).",
+          "minimum": 1,
+          "title": "Mean Scale",
+          "type": "number"
+        },
+        "confidence": {
+          "$ref": "#/$defs/Confidence"
+        }
+      },
+      "required": [
+        "model",
+        "origin",
+        "reference_distance_px",
+        "scale_at_reference",
+        "mean_scale",
+        "confidence"
+      ],
+      "title": "CardScale",
       "type": "object"
     },
     "ChangePasswordRequest": {
@@ -244,6 +406,166 @@
         "band"
       ],
       "title": "Confidence",
+      "type": "object"
+    },
+    "ConstantFit": {
+      "additionalProperties": false,
+      "description": "``x(t) = x0 + v t`` (autoplay).",
+      "properties": {
+        "model": {
+          "const": "constant",
+          "default": "constant",
+          "title": "Model",
+          "type": "string"
+        },
+        "velocity_px_s": {
+          "$ref": "#/$defs/MeasuredNumber"
+        }
+      },
+      "required": [
+        "model",
+        "velocity_px_s"
+      ],
+      "title": "ConstantFit",
+      "type": "object"
+    },
+    "ContinuousMotion": {
+      "additionalProperties": false,
+      "description": "The analysed scroller (``mode == \"continuous\"`` only).",
+      "properties": {
+        "element_id": {
+          "description": "MotionElement with kind \"scroller\".",
+          "pattern": "^e[1-9][0-9]*$",
+          "title": "Element Id",
+          "type": "string"
+        },
+        "axis": {
+          "enum": [
+            "x",
+            "y"
+          ],
+          "title": "Axis",
+          "type": "string"
+        },
+        "region": {
+          "$ref": "#/$defs/Box",
+          "description": "Scroller viewport, CSS px."
+        },
+        "region_confidence": {
+          "$ref": "#/$defs/Confidence"
+        },
+        "sign_convention": {
+          "const": "positive = content moves right (x) / down (y)",
+          "default": "positive = content moves right (x) / down (y)",
+          "title": "Sign Convention",
+          "type": "string"
+        },
+        "autoplay": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Autoplay"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null = no autoplay before interaction."
+        },
+        "pitch_px": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeasuredNumber"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Card spacing (card + gap) if observed."
+        },
+        "gap_px": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeasuredNumber"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Gap between cards if observed (PLAN-continuous §13)."
+        },
+        "card_scale": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CardScale"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Cards scale with their distance from the scroller centre. Omitted when the cards were rigid or not measured."
+        },
+        "phases": {
+          "items": {
+            "$ref": "#/$defs/Phase"
+          },
+          "minItems": 1,
+          "title": "Phases",
+          "type": "array"
+        },
+        "behavior": {
+          "$ref": "#/$defs/Behavior"
+        },
+        "span_ms": {
+          "$ref": "#/$defs/Span",
+          "description": "Analysed span (= interaction.total_duration_ms.forward)."
+        },
+        "samples": {
+          "description": "[t_ms, v_px_s, pos_px, quality] for the velocity chart. Excluded from the JSON export.",
+          "items": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "description": "Milliseconds.",
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "maxItems": 900,
+          "title": "Samples",
+          "type": "array"
+        }
+      },
+      "required": [
+        "element_id",
+        "axis",
+        "region",
+        "region_confidence",
+        "sign_convention",
+        "autoplay",
+        "pitch_px",
+        "gap_px",
+        "phases",
+        "behavior",
+        "span_ms",
+        "samples"
+      ],
+      "title": "ContinuousMotion",
       "type": "object"
     },
     "CreateUserRequest": {
@@ -341,6 +663,51 @@
       "title": "CursorEvent",
       "type": "object"
     },
+    "DragBehavior": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "description": "Number of drag phases.",
+          "minimum": 1,
+          "title": "Count",
+          "type": "integer"
+        },
+        "follows_pointer": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null = no cursor visible to compare.",
+          "title": "Follows Pointer"
+        },
+        "pointer_ratio": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeasuredNumber"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Content / pointer velocity."
+        },
+        "peak_speed_px_s": {
+          "$ref": "#/$defs/MeasuredNumber"
+        }
+      },
+      "required": [
+        "count",
+        "follows_pointer",
+        "pointer_ratio",
+        "peak_speed_px_s"
+      ],
+      "title": "DragBehavior",
+      "type": "object"
+    },
     "Easing": {
       "additionalProperties": false,
       "description": "Fitted timing function. ``keyword`` is set only when the fit *is* a CSS keyword curve.",
@@ -430,7 +797,7 @@
     },
     "ElementStatic": {
       "additionalProperties": false,
-      "description": "Non-animated element properties (low confidence heuristics).",
+      "description": "Non-animated element properties (low confidence heuristics), measured in state A.\n\nThe appearance values (PLAN-continuous §13) are optional and omitted from the JSON when not\nmeasured: ``background_color`` (element fill), ``text_color`` (text-like elements only) and\n``font_size_px`` (rough estimate from the text line height; confidence at most medium).",
       "properties": {
         "border_radius_px": {
           "anyOf": [
@@ -447,6 +814,39 @@
           "anyOf": [
             {
               "$ref": "#/$defs/MeasuredShadow"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "background_color": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeasuredColor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "text_color": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeasuredColor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "font_size_px": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeasuredNumber"
             },
             {
               "type": "null"
@@ -488,6 +888,7 @@
         "no_motion_detected",
         "unsupported_motion",
         "no_stable_state",
+        "continuous_motion_unsupported",
         "internal_error",
         "interrupted",
         "not_found",
@@ -526,6 +927,52 @@
         "message"
       ],
       "title": "ErrorDetail",
+      "type": "object"
+    },
+    "ExponentialFit": {
+      "additionalProperties": false,
+      "description": "Inertia: ``v(t) = v_inf + (v0 - v_inf) e^(-t/tau)``, fitted in the position domain.",
+      "properties": {
+        "model": {
+          "const": "exponential",
+          "default": "exponential",
+          "title": "Model",
+          "type": "string"
+        },
+        "tau_ms": {
+          "$ref": "#/$defs/MeasuredNumber"
+        },
+        "v0_px_s": {
+          "$ref": "#/$defs/MeasuredNumber",
+          "description": "Release velocity (signed)."
+        },
+        "v_inf_px_s": {
+          "description": "Asymptotic velocity: 0 or the autoplay velocity.",
+          "title": "V Inf Px S",
+          "type": "number"
+        },
+        "stop_px_s": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Speed (|v| of the decay) at which the content was observed to come to rest; the momentum is dropped below it. Omitted when the decay did not end at rest.",
+          "title": "Stop Px S"
+        }
+      },
+      "required": [
+        "model",
+        "tau_ms",
+        "v0_px_s",
+        "v_inf_px_s"
+      ],
+      "title": "ExponentialFit",
       "type": "object"
     },
     "Health": {
@@ -648,6 +1095,91 @@
       "title": "HealthLimits",
       "type": "object"
     },
+    "InertiaBehavior": {
+      "additionalProperties": false,
+      "description": "Momentum after release, aggregated over ``instances`` inertia phases.",
+      "properties": {
+        "model": {
+          "enum": [
+            "exponential",
+            "tween"
+          ],
+          "title": "Model",
+          "type": "string"
+        },
+        "tau_ms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeasuredNumber"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Set when model is exponential."
+        },
+        "duration_ms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeasuredNumber"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Set when model is tween."
+        },
+        "easing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Easing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Set when model is tween."
+        },
+        "release_speed_min_px_s": {
+          "minimum": 0,
+          "title": "Release Speed Min Px S",
+          "type": "number"
+        },
+        "release_speed_max_px_s": {
+          "minimum": 0,
+          "title": "Release Speed Max Px S",
+          "type": "number"
+        },
+        "instances": {
+          "minimum": 1,
+          "title": "Instances",
+          "type": "integer"
+        },
+        "stop_px_s": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeasuredNumber"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Exponential model: minimum speed at which the momentum stops (aggregated ExponentialFit.stop_px_s). Omitted when not observed."
+        }
+      },
+      "required": [
+        "model",
+        "tau_ms",
+        "duration_ms",
+        "easing",
+        "release_speed_min_px_s",
+        "release_speed_max_px_s",
+        "instances"
+      ],
+      "title": "InertiaBehavior",
+      "type": "object"
+    },
     "Interaction": {
       "additionalProperties": false,
       "properties": {
@@ -659,7 +1191,9 @@
             "expand_collapse",
             "dropdown",
             "modal",
-            "unknown"
+            "unknown",
+            "continuous",
+            "drag"
           ],
           "title": "Type",
           "type": "string"
@@ -682,7 +1216,9 @@
             "menu",
             "accordion",
             "modal",
-            "generic"
+            "generic",
+            "marquee",
+            "carousel"
           ],
           "title": "Pattern",
           "type": "string"
@@ -722,7 +1258,8 @@
           "enum": [
             "forward",
             "forward_reverse",
-            "round_trip"
+            "round_trip",
+            "continuous"
           ],
           "title": "Direction",
           "type": "string"
@@ -1212,7 +1749,7 @@
       "description": "One PNG. ``t_ms`` is null for composite images (element crops).",
       "properties": {
         "name": {
-          "pattern": "^(state_a|state_b|mid_25|mid_50|mid_75|annotated_a|annotated_b|el_e[1-9][0-9]*)\\.png$",
+          "pattern": "^(state_a|state_b|mid_25|mid_50|mid_75|annotated_a|annotated_b|el_e[1-9][0-9]*|phase_[1-9][0-9]?)\\.png$",
           "title": "Name",
           "type": "string"
         },
@@ -1225,7 +1762,8 @@
             "mid_75",
             "annotated_a",
             "annotated_b",
-            "element"
+            "element",
+            "phase"
           ],
           "title": "Kind",
           "type": "string"
@@ -1294,6 +1832,45 @@
       "title": "LoginRequest",
       "type": "object"
     },
+    "LoopInfo": {
+      "additionalProperties": false,
+      "description": "Seamless-loop length of the autoplay content. Never guessed: ``observed`` is false when\nthe content did not repeat within the recording (``period_px``/``duration_ms`` null).",
+      "properties": {
+        "observed": {
+          "title": "Observed",
+          "type": "boolean"
+        },
+        "period_px": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeasuredNumber"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Length of one content copy, CSS px."
+        },
+        "duration_ms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeasuredNumber"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "period_px / speed (stored so outputs can quote it, never recomputed)."
+        }
+      },
+      "required": [
+        "observed",
+        "period_px",
+        "duration_ms"
+      ],
+      "title": "LoopInfo",
+      "type": "object"
+    },
     "Me": {
       "additionalProperties": false,
       "description": "``GET /api/auth/me``, ``POST /api/auth/login``, ``POST /api/auth/password``.",
@@ -1332,6 +1909,27 @@
         "created_at"
       ],
       "title": "Me",
+      "type": "object"
+    },
+    "MeasuredColor": {
+      "additionalProperties": false,
+      "description": "A static (non-animated) solid colour estimate with its own confidence.",
+      "properties": {
+        "value": {
+          "description": "Uppercase #RRGGBB.",
+          "pattern": "^#[0-9A-F]{6}$",
+          "title": "Value",
+          "type": "string"
+        },
+        "confidence": {
+          "$ref": "#/$defs/Confidence"
+        }
+      },
+      "required": [
+        "value",
+        "confidence"
+      ],
+      "title": "MeasuredColor",
       "type": "object"
     },
     "MeasuredNumber": {
@@ -1452,7 +2050,8 @@
             "input",
             "badge",
             "accordion_panel",
-            "other"
+            "other",
+            "scroller"
           ],
           "title": "Role",
           "type": "string"
@@ -1478,7 +2077,8 @@
             "disappear",
             "backdrop",
             "resize",
-            "content_change"
+            "content_change",
+            "scroller"
           ],
           "title": "Kind",
           "type": "string"
@@ -1517,11 +2117,14 @@
     },
     "MotionSpec": {
       "additionalProperties": false,
-      "description": "Root of the IR. Cross-references (element/segment/transition ids) are validated.",
+      "description": "Root of the IR. Cross-references (element/segment/transition ids) are validated.\n\n``mode`` selects the shape: ``transition`` (segments + transitions, PLAN §8) or\n``continuous`` (one scroller in ``continuous``; no segments/transitions/relationships).",
       "properties": {
         "schema_version": {
-          "const": "0.1",
-          "default": "0.1",
+          "default": "0.2",
+          "enum": [
+            "0.1",
+            "0.2"
+          ],
           "title": "Schema Version",
           "type": "string"
         },
@@ -1533,8 +2136,28 @@
         "meta": {
           "$ref": "#/$defs/Meta"
         },
+        "mode": {
+          "default": "transition",
+          "enum": [
+            "transition",
+            "continuous"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
         "source": {
           "$ref": "#/$defs/Source"
+        },
+        "scene": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scene"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "interaction": {
           "$ref": "#/$defs/Interaction"
@@ -1547,10 +2170,10 @@
           "type": "array"
         },
         "segments": {
+          "description": "Transition mode: >= 1 segment. Continuous mode: empty.",
           "items": {
             "$ref": "#/$defs/Segment"
           },
-          "minItems": 1,
           "title": "Segments",
           "type": "array"
         },
@@ -1567,6 +2190,17 @@
           },
           "title": "Relationships",
           "type": "array"
+        },
+        "continuous": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ContinuousMotion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "cursor": {
           "$ref": "#/$defs/Cursor"
@@ -1701,6 +2335,7 @@
         "schema_version",
         "job_id",
         "meta",
+        "mode",
         "source",
         "interaction",
         "elements",
@@ -1719,7 +2354,7 @@
     },
     "Outputs": {
       "additionalProperties": false,
-      "description": "The four text tabs. Serialized keys: ``technical``, ``llm_prompt``, ``css``, ``json``.",
+      "description": "The text tabs. Serialized keys: ``technical``, ``llm_prompt``, ``css``, ``json`` and, in\ncontinuous mode only, ``js`` (omitted when null, so transition outputs are unchanged).",
       "properties": {
         "technical": {
           "title": "Technical",
@@ -1734,9 +2369,22 @@
           "type": "string"
         },
         "json": {
-          "description": "Pretty IR export without transition samples.",
+          "description": "Pretty IR export without transition / continuous samples.",
           "title": "Json",
           "type": "string"
+        },
+        "js": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Suggested JS driver (continuous mode only; absent in transition mode).",
+          "title": "Js"
         }
       },
       "required": [
@@ -1746,6 +2394,190 @@
         "json"
       ],
       "title": "Outputs",
+      "type": "object"
+    },
+    "PauseBehavior": {
+      "additionalProperties": false,
+      "description": "Autoplay slows to a stop when the pointer hovers / presses (``on``).",
+      "properties": {
+        "on": {
+          "enum": [
+            "hover",
+            "press",
+            "unknown"
+          ],
+          "title": "On",
+          "type": "string"
+        },
+        "on_confidence": {
+          "$ref": "#/$defs/Confidence"
+        },
+        "decel_ms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeasuredNumber"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "easing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Easing"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stops_completely": {
+          "title": "Stops Completely",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "on",
+        "on_confidence",
+        "decel_ms",
+        "easing",
+        "stops_completely"
+      ],
+      "title": "PauseBehavior",
+      "type": "object"
+    },
+    "Phase": {
+      "additionalProperties": false,
+      "description": "One labelled stretch of the scroller's velocity profile (chronological, no overlap).",
+      "properties": {
+        "id": {
+          "pattern": "^p[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "autoplay",
+            "decelerate",
+            "paused",
+            "drag",
+            "inertia",
+            "snap",
+            "stop",
+            "resume",
+            "unknown"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "start_ms": {
+          "description": "Milliseconds.",
+          "minimum": 0,
+          "title": "Start Ms",
+          "type": "integer"
+        },
+        "end_ms": {
+          "description": "Milliseconds.",
+          "minimum": 0,
+          "title": "End Ms",
+          "type": "integer"
+        },
+        "v_start_px_s": {
+          "title": "V Start Px S",
+          "type": "number"
+        },
+        "v_end_px_s": {
+          "title": "V End Px S",
+          "type": "number"
+        },
+        "v_peak_px_s": {
+          "description": "Signed velocity with the largest magnitude.",
+          "title": "V Peak Px S",
+          "type": "number"
+        },
+        "displacement_px": {
+          "title": "Displacement Px",
+          "type": "number"
+        },
+        "fit": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "constant": "#/$defs/ConstantFit",
+                  "exponential": "#/$defs/ExponentialFit",
+                  "ramp": "#/$defs/RampFit",
+                  "tween": "#/$defs/TweenFit"
+                },
+                "propertyName": "model"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ConstantFit"
+                },
+                {
+                  "$ref": "#/$defs/ExponentialFit"
+                },
+                {
+                  "$ref": "#/$defs/RampFit"
+                },
+                {
+                  "$ref": "#/$defs/TweenFit"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fit"
+        },
+        "interrupted": {
+          "default": false,
+          "description": "Cut short, e.g. decelerate cut by a drag, inertia re-grabbed.",
+          "title": "Interrupted",
+          "type": "boolean"
+        },
+        "evidence": {
+          "default": "velocity",
+          "enum": [
+            "velocity",
+            "cursor",
+            "velocity+cursor"
+          ],
+          "title": "Evidence",
+          "type": "string"
+        },
+        "confidence": {
+          "$ref": "#/$defs/Confidence",
+          "description": "Label confidence."
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Notes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "start_ms",
+        "end_ms",
+        "v_start_px_s",
+        "v_end_px_s",
+        "v_peak_px_s",
+        "displacement_px",
+        "fit",
+        "interrupted",
+        "evidence",
+        "confidence",
+        "notes"
+      ],
+      "title": "Phase",
       "type": "object"
     },
     "PxValue": {
@@ -1768,6 +2600,41 @@
         "number"
       ],
       "title": "PxValue",
+      "type": "object"
+    },
+    "RampFit": {
+      "additionalProperties": false,
+      "description": "Eased velocity ramp ``v = from + (to - from) E((t - t0) / D)`` (decelerate / resume).",
+      "properties": {
+        "model": {
+          "const": "ramp",
+          "default": "ramp",
+          "title": "Model",
+          "type": "string"
+        },
+        "from_px_s": {
+          "title": "From Px S",
+          "type": "number"
+        },
+        "to_px_s": {
+          "title": "To Px S",
+          "type": "number"
+        },
+        "duration_ms": {
+          "$ref": "#/$defs/MeasuredNumber"
+        },
+        "easing": {
+          "$ref": "#/$defs/Easing"
+        }
+      },
+      "required": [
+        "model",
+        "from_px_s",
+        "to_px_s",
+        "duration_ms",
+        "easing"
+      ],
+      "title": "RampFit",
       "type": "object"
     },
     "RatioValue": {
@@ -1886,6 +2753,94 @@
         "artifacts"
       ],
       "title": "ResultEnvelope",
+      "type": "object"
+    },
+    "ResumeBehavior": {
+      "additionalProperties": false,
+      "properties": {
+        "delay_after_rest_ms": {
+          "$ref": "#/$defs/MeasuredNumber"
+        },
+        "delay_after_release_ms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeasuredNumber"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "delay_after_leave_ms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeasuredNumber"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Hover pause: resume onset after the pointer left the scroller. Omitted when no pointer leave was seen before the resume."
+        },
+        "ramp_ms": {
+          "$ref": "#/$defs/MeasuredNumber"
+        },
+        "easing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Easing"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "to_speed_px_s": {
+          "minimum": 0,
+          "title": "To Speed Px S",
+          "type": "number"
+        },
+        "direction_preserved": {
+          "title": "Direction Preserved",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "delay_after_rest_ms",
+        "delay_after_release_ms",
+        "ramp_ms",
+        "easing",
+        "to_speed_px_s",
+        "direction_preserved"
+      ],
+      "title": "ResumeBehavior",
+      "type": "object"
+    },
+    "Scene": {
+      "additionalProperties": false,
+      "description": "Recorded page context (PLAN-continuous §13). Optional; omitted when not measured.",
+      "properties": {
+        "viewport_css": {
+          "$ref": "#/$defs/Size",
+          "description": "Recorded frame size in CSS px."
+        },
+        "page_background": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeasuredColor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "viewport_css"
+      ],
+      "title": "Scene",
       "type": "object"
     },
     "Segment": {
@@ -2049,6 +3004,86 @@
       "title": "ShadowValue",
       "type": "object"
     },
+    "Size": {
+      "additionalProperties": false,
+      "description": "Width x height in CSS px.",
+      "properties": {
+        "w": {
+          "exclusiveMinimum": 0,
+          "title": "W",
+          "type": "number"
+        },
+        "h": {
+          "exclusiveMinimum": 0,
+          "title": "H",
+          "type": "number"
+        }
+      },
+      "required": [
+        "w",
+        "h"
+      ],
+      "title": "Size",
+      "type": "object"
+    },
+    "SnapBehavior": {
+      "additionalProperties": false,
+      "description": "``grid``: rests land on the card pitch. ``abrupt_ambiguous``: abrupt stops that may be a\nsnap or the pointer stopping before release (no grid evidence; from ``stop`` phases).",
+      "properties": {
+        "kind": {
+          "enum": [
+            "grid",
+            "abrupt_ambiguous"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "step_px": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeasuredNumber"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "duration_ms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeasuredNumber"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "easing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Easing"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "overshoot": {
+          "description": "Spring-like overshoot seen; spring not reconstructed.",
+          "title": "Overshoot",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "step_px",
+        "duration_ms",
+        "easing",
+        "overshoot"
+      ],
+      "title": "SnapBehavior",
+      "type": "object"
+    },
     "Source": {
       "additionalProperties": false,
       "description": "Input video facts. ``width``/``height`` are source pixels after rotation (not CSS px).",
@@ -2137,6 +3172,29 @@
       "title": "Source",
       "type": "object"
     },
+    "Span": {
+      "additionalProperties": false,
+      "properties": {
+        "start_ms": {
+          "description": "Milliseconds.",
+          "minimum": 0,
+          "title": "Start Ms",
+          "type": "integer"
+        },
+        "end_ms": {
+          "description": "Milliseconds.",
+          "minimum": 0,
+          "title": "End Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start_ms",
+        "end_ms"
+      ],
+      "title": "Span",
+      "type": "object"
+    },
     "SpecWarning": {
       "additionalProperties": false,
       "properties": {
@@ -2156,7 +3214,11 @@
             "low_fps_source",
             "preview_unavailable",
             "reverse_not_recorded",
-            "frames_subsampled"
+            "frames_subsampled",
+            "ambient_motion_masked",
+            "extra_scrollers_ignored",
+            "tracking_degraded",
+            "loop_period_not_observed"
           ],
           "title": "Code",
           "type": "string"
@@ -2523,7 +3585,9 @@
           "enum": [
             "pointer_enter",
             "click",
-            "unknown"
+            "unknown",
+            "autoplay",
+            "drag"
           ],
           "title": "Kind",
           "type": "string"
@@ -2553,6 +3617,36 @@
         "confidence"
       ],
       "title": "Trigger",
+      "type": "object"
+    },
+    "TweenFit": {
+      "additionalProperties": false,
+      "description": "Eased position tween ``x = x0 + D E((t - t0) / T)`` (snap, tween-style inertia).",
+      "properties": {
+        "model": {
+          "const": "tween",
+          "default": "tween",
+          "title": "Model",
+          "type": "string"
+        },
+        "distance_px": {
+          "$ref": "#/$defs/MeasuredNumber",
+          "description": "Signed distance travelled."
+        },
+        "duration_ms": {
+          "$ref": "#/$defs/MeasuredNumber"
+        },
+        "easing": {
+          "$ref": "#/$defs/Easing"
+        }
+      },
+      "required": [
+        "model",
+        "distance_px",
+        "duration_ms",
+        "easing"
+      ],
+      "title": "TweenFit",
       "type": "object"
     },
     "UpdateUserRequest": {

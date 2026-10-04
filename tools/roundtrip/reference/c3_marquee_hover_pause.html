@@ -1,0 +1,32 @@
+<!doctype html>
+<!-- C3 marquee_hover_pause truth: autoplay +40 px/s; pointer enters -> slow to 0 over 400 ms ease-out; pointer leaves -> after 300 ms ramp to +40 px/s over 600 ms ease-in. No drag. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C3 reference</title>
+<link rel="stylesheet" href="reference.css">
+</head>
+<body>
+  <div class="header"><span class="logo">Mimic Store</span>
+    <nav><span style="left:960px">Products</span><span style="left:1060px">Pricing</span><span style="left:1160px">About</span></nav></div>
+  <div class="sidebar">
+    <div class="row" style="top:26px"><span class="dot"></span><span class="label">Overview</span></div>
+    <div class="row" style="top:82px"><span class="dot"></span><span class="label">Products</span></div>
+    <div class="row" style="top:138px"><span class="dot"></span><span class="label">Orders</span></div>
+    <div class="row" style="top:194px"><span class="dot"></span><span class="label">Customers</span></div>
+    <div class="row" style="top:250px"><span class="dot"></span><span class="label">Reports</span></div>
+    <div class="row" style="top:306px"><span class="dot"></span><span class="label">Settings</span></div>
+  </div>
+  <div class="footer">Synthetic scene - Mimic test suite</div>
+  <div class="scroller" aria-label="Carousel"><div class="track"></div></div>
+  <script src="scroller.js"></script>
+  <script>
+    const root = document.querySelector('.scroller');
+    RefScroller.buildCards(root.querySelector('.track'), 8, 2);
+    RefScroller.mountScroller(root, { axis: 'x', autoplay: 40, period: 1728, drag: false,
+        hoverPause: { decelMs: 400, ease: [0, 0, 0.58, 1] },
+        resume: { delayAfterRestMs: 0, delayAfterLeaveMs: 300, rampMs: 600, ease: [0.42, 0, 1, 1] } });
+  </script>
+</body>
+</html>

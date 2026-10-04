@@ -23,13 +23,16 @@ JOB_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 ALLOWED_EXTENSIONS: frozenset[str] = frozenset({"mp4", "mov", "webm", "m4v"})
 #: Servable keyframe file names (whitelist for ``GET /api/jobs/{id}/keyframes/{name}``).
 KEYFRAME_NAME_RE = re.compile(
-    r"^(state_a|state_b|mid_25|mid_50|mid_75|annotated_a|annotated_b|el_e[1-9][0-9]*)\.png$"
+    r"^(state_a|state_b|mid_25|mid_50|mid_75|annotated_a|annotated_b|el_e[1-9][0-9]*"
+    r"|phase_[1-9][0-9]?)\.png$"
 )
 
 PixelRatioOption = Literal["auto", "1", "2", "3"]
+#: ``phase``: continuous mode, one frame per phase (``phase_<k>.png``, ``t_ms`` = phase midpoint).
 KeyframeKind = Literal[
-    "state_a", "state_b", "mid_25", "mid_50", "mid_75", "annotated_a", "annotated_b", "element"
-]
+    "state_a", "state_b", "mid_25", "mid_50", "mid_75", "annotated_a", "annotated_b", "element",
+    "phase",
+]  # fmt: skip
 #: Account role (PLAN-auth U1). Same values as ``app.auth.models.Role``.
 UserRole = Literal["admin", "user"]
 
@@ -332,6 +335,8 @@ class ResultEnvelope(ApiModel):
     def _same_job(self) -> ResultEnvelope:
         if self.spec.job_id != self.job_id:
             raise ValueError("spec.job_id must equal job_id")
+        if (self.outputs.js is not None) != (self.spec.mode == "continuous"):
+            raise ValueError("outputs.js is set exactly in continuous mode")
         return self
 
 

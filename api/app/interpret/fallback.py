@@ -7,6 +7,8 @@ caller-supplied ``duration_ms``.
 
 Role rules, first match wins (CSS px; frame = video size / pixel ratio):
 
+0. kind ``scroller`` -> ``scroller``; a non-text direct child of a scroller -> ``card`` (the
+   items of the moving strip). Continuous mode only: transition inputs never have a scroller.
 1. kind ``backdrop`` -> ``backdrop``
 2. ``appear`` + large (>= 10 % of the frame) + centered (center within 20 % of frame center)
    -> ``modal_panel``
@@ -26,7 +28,8 @@ Role rules, first match wins (CSS px; frame = video size / pixel ratio):
 
 The interpreter input has no cursor coordinates, only ``cursor_summary`` text; the target is
 the first known element id mentioned there (e.g. "enters e1 at 1120 ms"), else the largest
-``transform`` element, else the largest element.
+``transform`` element, else the largest element. Continuous mode: the target is always the
+scroller (the IR requires ``interaction.target_element_id`` = the scroller).
 """
 
 from __future__ import annotations
@@ -43,6 +46,7 @@ from app.interpret.base import (
     InterpretedElement,
     InterpretedInteraction,
 )
+from app.interpret.prompt import scroller_id
 from app.models.ir import InterpretationStatus, InterpreterProvider, Role, TriggerKind
 
 CARD_MIN_AREA = 20_000.0
@@ -55,6 +59,7 @@ IMAGE_MIN_SATURATION = 35.0
 
 #: Per-role confidence of the geometric rule that produced it.
 ROLE_CONFIDENCE: dict[str, float] = {
+    "scroller": 0.7,
     "backdrop": 0.7,
     "modal_panel": 0.5,
     "dropdown_menu": 0.5,
@@ -70,6 +75,8 @@ TRIGGER_TEXT: dict[str, str] = {
     "pointer_enter": "Pointer enters the target",
     "click": "Click on the target",
     "unknown": "Trigger could not be determined",
+    "autoplay": "Content moves on its own (autoplay)",
+    "drag": "Pointer drags the content",
 }
 
 STATUS_NOTE: dict[str, str] = {
@@ -181,11 +188,16 @@ def assign_roles(inp: InterpretationInput) -> dict[str, Role]:
     card_id = max(card_candidates, key=_area).id if card_candidates else None
     appears = [e for e in els if e.kind == "appear"]
     list_ids = _list_items(appears)
+    scrollers = {e.id for e in els if e.kind == "scroller"}
 
     roles: dict[str, Role] = {}
     for el in els:
         role: Role
-        if el.kind == "backdrop":
+        if el.kind == "scroller":
+            role = "scroller"
+        elif el.parent_id in scrollers and not el.text_like:
+            role = "card"
+        elif el.kind == "backdrop":
             role = "backdrop"
         elif _is_modal_like(el, fw, fh):
             role = "modal_panel"
@@ -229,7 +241,11 @@ def role_title(role: str) -> str:
 
 
 def pick_target(inp: InterpretationInput) -> str | None:
-    """First known id in the cursor summary, else largest transform element, else largest."""
+    """Scroller if any (continuous), else first known id in the cursor summary, else largest
+    transform element, else largest."""
+    sid = scroller_id(inp)
+    if sid is not None:
+        return sid
     known = {e.id for e in inp.elements}
     for m in _ID_RE.finditer(inp.cursor_summary):
         if m.group(0) in known:

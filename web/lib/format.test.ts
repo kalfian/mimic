@@ -9,8 +9,13 @@ import { test } from "node:test";
 import { newPasswordProblems, passwordLength, usernameProblem } from "./authPolicy";
 import { ApiError, parseRetryAfter, type ApiErrorCode } from "./errors";
 import {
+  appearanceFacts,
+  AUTOPLAY_DIRECTION_LABELS,
+  AXIS_LABELS,
   describeApiError,
   describeError,
+  formatApproxMs,
+  formatDistance,
   formatJobOwner,
   formatLastLogin,
   formatMs,
@@ -19,9 +24,20 @@ import {
   formatRelativeTime,
   formatRetryAfter,
   formatScale,
+  formatSpeed,
+  formatSpeedChange,
+  formatTau,
+  formatCardScale,
+  formatVelocity,
+  INERTIA_MODEL_LABELS,
+  PAUSE_TRIGGER_LABELS,
+  PHASE_EVIDENCE_LABELS,
+  PHASE_KIND_LABELS,
   SETUP_COMMAND,
+  SNAP_KIND_LABELS,
   USER_ROLE_LABELS,
 } from "./format";
+import { PHASE_KINDS } from "./types";
 
 test("formatPx rounds half away from zero like the backend", () => {
   const cases: [number, string][] = [
@@ -47,7 +63,8 @@ test("formatScale / formatOpacity / formatMs match the backend", () => {
 
 const ALL_CODES: ApiErrorCode[] = [
   "unsupported_format", "file_too_large", "too_long", "too_short", "decode_failed", "invalid_request",
-  "no_motion_detected", "unsupported_motion", "no_stable_state", "internal_error", "interrupted",
+  "no_motion_detected", "unsupported_motion", "no_stable_state", "continuous_motion_unsupported",
+  "internal_error", "interrupted",
   "not_found", "not_ready", "already_running", "unauthenticated", "invalid_credentials", "account_disabled",
   "forbidden", "password_change_required", "origin_not_allowed", "too_many_attempts", "setup_required",
   "last_admin", "self_action_forbidden", "username_taken", "weak_password", "current_password_incorrect",
@@ -62,6 +79,12 @@ test("describeError covers every code", () => {
   assert.ok(describeError("setup_required").guidance.some((g) => g.includes(SETUP_COMMAND)));
   assert.match(describeError("cookie_rejected").guidance.join(" "), /same hostname/);
   assert.match(describeError("not_found").message, /don't have access/);
+  assert.match(describeError("continuous_motion_unsupported").message, /scroller/);
+});
+
+test("every continuous phase kind has a label (PLAN-continuous §7.1)", () => {
+  assert.deepEqual(Object.keys(PHASE_KIND_LABELS).sort(), [...PHASE_KINDS].sort());
+  for (const kind of PHASE_KINDS) assert.ok(PHASE_KIND_LABELS[kind].length > 0, kind);
 });
 
 test("describeApiError: server message, client message, Retry-After", () => {
@@ -156,4 +179,62 @@ test("client-side account validation mirrors the server policy", () => {
     newPasswordProblems({ newPassword: "same old passphrase", confirmPassword: "same old passphrase", username: "ann", currentPassword: "same old passphrase" }).newPassword ?? "",
     /different/,
   );
+});
+
+test("continuous speeds round like the generators (>= 100 px/s → 10, else 1)", () => {
+  const cases: [number, string][] = [
+    [39, "≈39 px/s"], [39.5, "≈40 px/s"], [-39.4, "≈39 px/s"], [99.4, "≈99 px/s"], [99.5, "≈100 px/s"],
+    [-1496, "≈1500 px/s"], [1720, "≈1720 px/s"], [1715, "≈1720 px/s"], [0, "0 px/s"], [0.4, "0 px/s"],
+  ];
+  for (const [v, want] of cases) assert.equal(formatSpeed(v), want, String(v));
+  assert.equal(formatSpeed(240, { unit: false }), "≈240");
+  assert.equal(formatSpeed(240, { approx: false }), "240 px/s");
+  assert.equal(formatVelocity(39, "x"), "≈39 px/s right");
+  assert.equal(formatVelocity(-1500, "x"), "≈1500 px/s left");
+  assert.equal(formatVelocity(-30, "y"), "≈30 px/s up");
+  assert.equal(formatVelocity(30, "y"), "≈30 px/s down");
+  assert.equal(formatVelocity(0.2, "x"), "0 px/s");
+  assert.equal(formatSpeedChange(39, 0), "≈39 → 0 px/s");
+  assert.equal(formatDistance(-619.2, "x"), "619px left");
+  assert.equal(formatDistance(0, "y"), "0px");
+  assert.equal(formatApproxMs(703), "≈700 ms");
+  assert.equal(formatApproxMs(745), "≈750 ms");
+  assert.equal(formatTau(196), "τ\u00a0≈\u00a0200\u00a0ms");
+  assert.equal(formatCardScale({ scale_at_reference: 1.1694, reference_distance_px: 261.3 }), "×1 at the centre → ≈×1.17 at 261px");
+});
+
+test("continuous enum labels are complete", () => {
+  const nonEmpty = (labels: Record<string, string>, keys: string[]) => {
+    assert.deepEqual(Object.keys(labels).sort(), [...keys].sort());
+    for (const k of keys) assert.ok(labels[k].length > 0, k);
+  };
+  nonEmpty(AXIS_LABELS, ["x", "y"]);
+  nonEmpty(AUTOPLAY_DIRECTION_LABELS, ["left", "right", "up", "down"]);
+  nonEmpty(PAUSE_TRIGGER_LABELS, ["hover", "press", "unknown"]);
+  nonEmpty(INERTIA_MODEL_LABELS, ["exponential", "tween"]);
+  nonEmpty(SNAP_KIND_LABELS, ["grid", "abrupt_ambiguous"]);
+  nonEmpty(PHASE_EVIDENCE_LABELS, ["velocity", "cursor", "velocity+cursor"]);
+});
+
+test("appearanceFacts lists only measured values, in display order", () => {
+  const c = (value: number) => ({ value, band: value >= 0.8 ? ("high" as const) : value >= 0.5 ? ("medium" as const) : ("low" as const) });
+  assert.deepEqual(appearanceFacts({ border_radius_px: null, shadow: null }), []);
+  const facts = appearanceFacts({
+    border_radius_px: { value: 12, confidence: c(0.45) },
+    shadow: { value: null, confidence: c(0.6) },
+    background_color: { value: "#ffffff", confidence: c(0.75) },
+    text_color: { value: "#1A1A1A", confidence: c(0.6) },
+    font_size_px: { value: 16, confidence: c(0.35) },
+  });
+  assert.deepEqual(
+    facts.map((f) => [f.key, f.value, f.swatch]),
+    [
+      ["background_color", "#FFFFFF", "#FFFFFF"],
+      ["text_color", "#1A1A1A", "#1A1A1A"],
+      ["font_size_px", "16px", null],
+      ["border_radius_px", "12px", null],
+      ["shadow", "none", null],
+    ],
+  );
+  assert.equal(facts[2].confidence.band, "low");
 });

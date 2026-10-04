@@ -1,0 +1,32 @@
+<!doctype html>
+<!-- DELIBERATELY WRONG C4 (harness negative control): autoplay x1.5 (+60 px/s), inertia tau x2 (400 ms), and no resume after rest. The round-trip compare must FAIL autoplay speed, inertia tau, the phase sequence and the resume rows. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C4 deliberately wrong</title>
+<link rel="stylesheet" href="reference.css">
+</head>
+<body>
+  <div class="header"><span class="logo">Mimic Store</span>
+    <nav><span style="left:960px">Products</span><span style="left:1060px">Pricing</span><span style="left:1160px">About</span></nav></div>
+  <div class="sidebar">
+    <div class="row" style="top:26px"><span class="dot"></span><span class="label">Overview</span></div>
+    <div class="row" style="top:82px"><span class="dot"></span><span class="label">Products</span></div>
+    <div class="row" style="top:138px"><span class="dot"></span><span class="label">Orders</span></div>
+    <div class="row" style="top:194px"><span class="dot"></span><span class="label">Customers</span></div>
+    <div class="row" style="top:250px"><span class="dot"></span><span class="label">Reports</span></div>
+    <div class="row" style="top:306px"><span class="dot"></span><span class="label">Settings</span></div>
+  </div>
+  <div class="footer">Synthetic scene - Mimic test suite</div>
+  <div class="scroller is-draggable" aria-label="Carousel"><div class="track"></div></div>
+  <script src="scroller.js"></script>
+  <script>
+    const root = document.querySelector('.scroller');
+    RefScroller.buildCards(root.querySelector('.track'), 8, 2);
+    RefScroller.mountScroller(root, { axis: 'x', autoplay: 60, period: 1728, drag: true, releaseWindowMs: 50,
+        inertia: { tauMs: 400, stopPxS: 10 },
+        resume: null });
+  </script>
+</body>
+</html>

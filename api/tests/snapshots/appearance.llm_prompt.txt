@@ -1,0 +1,60 @@
+Recreate the reference UI interaction as a single self-contained, responsive HTML file, as follows.
+
+STRUCTURE
+
+Create a product card containing:
+- image
+- category label
+- title
+- description
+- arrow icon
+
+Animated elements referenced below: product card, product image, card title, arrow icon.
+
+APPEARANCE (measured, approximate)
+
+Measured from the recording in the initial state, in CSS px; values the interaction animates are given with the steps below instead.
+- Recorded viewport: 1440 x 900px.
+- Page background: approximately #F3F4F6.
+- Product card: 320 x 400px, placed 560px from the left and 240px from the top of the viewport; background approximately #FFFFFF; corner radius possibly 12px (low confidence).
+- Product image: 320 x 200px, at the top-left corner of the product card; background possibly #C7D2FE (low confidence).
+- Card title: 240 x 28px, placed 24px from the left and 228px from the top of the product card; font size possibly 18px (low confidence).
+- Arrow icon: 20 x 20px, placed 276px from the left and 356px from the top of the product card.
+- Card description: 272 x 40px, placed 24px from the left and 268px from the top of the product card; text color approximately #6B7280 (medium confidence); font size approximately 14px (medium confidence).
+
+INTERACTION
+
+The entire product card acts as the hover target.
+
+When the pointer enters the product card:
+
+1. Move the entire product card upward approximately 8px over approximately 280ms using an ease-out curve.
+2. Simultaneously, subtly increase the product card shadow from approximately 0 4px 12px rgba(0, 0, 0, 0.08) to 0 12px 32px rgba(0, 0, 0, 0.16) over approximately 280ms using an ease-out curve (low confidence).
+3. Simultaneously, change the card title text color from approximately #111111 to #5252FF over approximately 200ms using an ease curve (medium confidence).
+4. Scale the product image from 1.00 to approximately 1.06 around its center over approximately 320ms using cubic-bezier(0.16, 1, 0.3, 1) (close to expoOut), starting approximately 30ms after the product card movement begins (medium confidence).
+5. Move the arrow icon approximately 4px to the right over approximately 200ms using an ease-out curve, starting approximately 80ms after the product card movement begins (medium confidence).
+6. Simultaneously, subtly increase the arrow icon opacity from approximately 0.7 to 1 over approximately 200ms using an ease-out curve (low confidence).
+
+The animation should feel smooth and responsive, not springy.
+
+When the pointer leaves the product card, reverse all properties to their original states:
+- Product card movement and shadow, and product image scaling: over approximately 220ms using an ease-in-out curve.
+- Card title text color: over approximately 180ms using an ease curve.
+- Arrow icon movement and opacity: over approximately 180ms using an ease-in-out curve.
+
+OUTPUT
+
+Build this as one self-contained, responsive HTML file named index.html: the markup, one <style> block and, only if the interaction needs it, one inline <script>. No frameworks, CDNs, external fonts, external images or build step; the file must work when opened directly in a browser.
+
+- Content: build only the structure above, with neutral placeholders instead of real images or copy: images as a solid or gradient block with a fixed aspect-ratio, text as short role-named or lorem-style text (for example "Title", "Description"), icons as a simple inline SVG. Do not add UI beyond what is needed to demonstrate the interaction.
+- Layout: mobile-first and fluid (max-width with percentages or clamp()), working from 320px wide phones to wide desktops, with the standard responsive <meta name="viewport"> tag. The layout may reflow (for example a row of cards collapses to one column), but keep every motion value above as specified in CSS px and ms: they are measured design values, so do not scale them with the viewport.
+- Appearance: match the sizes, positions, colors, corner radii, shadows and font sizes listed under APPEARANCE as closely as you can; they were measured from the recording, so use them instead of your own styling. Keep that measured layout at the recorded viewport width and wider, and reflow responsively below it as described under Layout. Fonts are not identified: use a system sans-serif stack at the measured sizes. Content stays placeholder: give the placeholder blocks and text the measured colors, but do not try to reproduce real images, icons or copy.
+- Motion: implement the steps as CSS transitions with the durations, delays and easing curves exactly as listed above. Put the forward timings on the hover state and the reverse timings on the base state (CSS uses the transition of the state being entered). Use the individual translate and scale properties rather than transform.
+- Hover: wrap the hover styles in @media (hover: hover) and (pointer: fine). Make the product card focusable (for example render it as a link) and apply the same styles on :focus-visible, outside that media query, so keyboard users get the effect. On touch screens there is no hover: let a tap toggle the same state (a class set by a few lines of inline script) so the effect is still reachable.
+- Reduced motion: under @media (prefers-reduced-motion: reduce), drop the movement and scaling (leave them out or apply them without a transition) but keep the opacity, text color, and shadow changes so the state change stays visible.
+- Semantics: use semantic elements (article, a, button, headings, p) and mark decorative placeholders with aria-hidden="true".
+
+CONSTRAINTS
+
+All numbers are estimates measured from a screen recording (display scale assumed 2x); keep them as targets, not exact source values.
+Do not invent additional animations that are not described above.

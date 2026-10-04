@@ -21,12 +21,15 @@ export function VideoPlayer({
   source,
   segments,
   keyframes,
+  continuous = false,
 }: {
   src: string | null;
   playback: Playback;
   source: Source;
   segments: Segment[];
   keyframes: KeyframeArtifact[];
+  /** Continuous results: no state A/B frames; fall back to the first and last phase frames. */
+  continuous?: boolean;
 }) {
   const { videoRef, videoProps, status, playing, currentMs, durationMs, frameMs, rate } = playback;
   const ready = status === "ready";
@@ -68,8 +71,10 @@ export function VideoPlayer({
       {unavailable ? (
         <figcaption className="flex items-start gap-2 border-t border-line px-4 py-2.5 text-sm text-ink-2">
           <IconInfo className="mt-0.5 shrink-0 text-ink-3" />
-          {src ? "The preview could not be played in this browser." : "No browser preview for this recording."} Showing the start and end
-          keyframes instead. Timeline bars still move the playhead.
+          {src ? "The preview could not be played in this browser." : "No browser preview for this recording."}{" "}
+          {continuous
+            ? "Showing the first and last phase keyframes instead. The velocity chart still moves the playhead."
+            : "Showing the start and end keyframes instead. Timeline bars still move the playhead."}
         </figcaption>
       ) : (
         <div role="group" aria-label="Playback controls" onKeyDown={onKeyDown} className="border-t border-line">
@@ -153,7 +158,11 @@ function KeyframeFallback({ keyframes, width, height }: { keyframes: KeyframeArt
   const a = keyframes.find((k) => k.kind === "state_a");
   const b = keyframes.find((k) => k.kind === "state_b");
   const [failed, setFailed] = useState<Record<string, boolean>>({});
-  const frames = [a, b].filter((k): k is KeyframeArtifact => Boolean(k));
+  const phases = keyframes.filter((k) => k.kind === "phase").sort((x, y) => (x.t_ms ?? 0) - (y.t_ms ?? 0));
+  // Continuous results have phase frames only: first and last stand in for start / end.
+  const frames = (a || b ? [a, b] : [phases[0], phases.length > 1 ? phases[phases.length - 1] : undefined]).filter((k): k is KeyframeArtifact =>
+    Boolean(k),
+  );
   const w = width > 0 ? width : 16;
   const h = height > 0 ? height : 10;
   const portrait = h > w;
@@ -177,7 +186,7 @@ function KeyframeFallback({ keyframes, width, height }: { keyframes: KeyframeArt
               // eslint-disable-next-line @next/next/no-img-element -- API-served keyframe; dimensions come from the recording
               <img
                 src={assetUrl(k.url)}
-                alt={k.kind === "state_a" ? "Start state keyframe" : "End state keyframe"}
+                alt={k.kind === "state_a" ? "Start state keyframe" : k.kind === "state_b" ? "End state keyframe" : `Phase keyframe at ${k.t_ms ?? 0} ms`}
                 width={w}
                 height={h}
                 className="size-full object-contain"
@@ -186,7 +195,7 @@ function KeyframeFallback({ keyframes, width, height }: { keyframes: KeyframeArt
             )}
           </div>
           <span className="absolute top-2 left-2 rounded-sm bg-black/70 px-1.5 font-mono text-2xs text-white">
-            {k.kind === "state_a" ? "A · start" : "B · end"}
+            {k.kind === "state_a" ? "A · start" : k.kind === "state_b" ? "B · end" : `${k.t_ms ?? 0} ms`}
           </span>
         </div>
       ))}

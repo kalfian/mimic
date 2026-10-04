@@ -3,17 +3,21 @@
 Structure (each piece unit-testable without a video):
 
 * :class:`Pass1Accumulator` consumes ``(t, gray)`` frames one at a time and keeps only small
-  per-frame data (blobs, changed-area fraction, phase-correlation shift, 240w thumbnail).
+  per-frame data (blobs, changed-area fraction, phase-correlation shift, 240w thumbnail, and
+  the coarse cell-activity grid used by regime detection, PLAN-continuous §3.1).
 * :func:`segment_energy` — hysteresis segmentation of the UI energy series (pure numpy).
 * :func:`build_scan_result` — cursor separation, energy, segments, stable gaps, global flag,
   forward/reverse pairing and the primary interaction; raises the pipeline errors
-  ``no_motion_detected`` / ``unsupported_motion`` / ``no_stable_state``.
+  ``no_motion_detected`` / ``unsupported_motion`` / ``no_stable_state``. With ``ambient``
+  regions (PLAN-continuous §3.4) the same steps run with those regions masked out; without
+  them the computation is exactly the transition-only path.
 * :func:`scan_video` — glue: stream pass 1 from ffmpeg and build the result.
 """
 
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -24,6 +28,7 @@ from app.core.errors import ErrorCode, PipelineError
 from app.models.ir import SpecWarning
 from app.models.measure import (
     ActiveSegment,
+    AmbientRegion,
     CursorTrack,
     PrimaryInteraction,
     ProbeInfo,
@@ -60,6 +65,16 @@ class Pass1Stats:
     image_scale: float  # pass-1 px per source px
     thumb_scale: float  # thumbnail px per source px
     frame_css: tuple[float, float]  # full frame size in CSS px
+    #: bool (N, gh, gw): cell changed in the fast or the lagged diff (PLAN-continuous §3.1).
+    #: Cells tile the full frame: ``gw = ceil(frame_w_css / cell_css)`` (same for rows), so one
+    #: cell is ``frame_css / (gw, gh)`` CSS px (≈ ``cell_css``). None = not recorded.
+    activity: np.ndarray | None = None
+
+
+def activity_grid_shape(frame_css: tuple[float, float], cell_css: float) -> tuple[int, int]:
+    """``(rows, cols)`` of the pass-1 activity grid for a frame of ``frame_css`` CSS px."""
+    w, h = frame_css
+    return (max(1, math.ceil(h / cell_css - 1e-9)), max(1, math.ceil(w / cell_css - 1e-9)))
 
 
 @dataclass(slots=True)
@@ -81,6 +96,7 @@ class Pass1Accumulator:
     shift_css: list[float] = field(default_factory=list)
     response: list[float] = field(default_factory=list)
     thumbs: list[np.ndarray] = field(default_factory=list)
+    activity: list[np.ndarray] = field(default_factory=list)
     _thumb_size: tuple[int, int] | None = None
 
     def _to_css(self, px: float) -> float:
@@ -88,12 +104,16 @@ class Pass1Accumulator:
 
     def _blobs(
         self, cur: np.ndarray, ref: np.ndarray, top_rows: bool = False
-    ) -> tuple[list[Blob], float]:
-        """Thresholded diff → open → dilate → components (CSS px) + changed fraction."""
+    ) -> tuple[list[Blob], float, np.ndarray]:
+        """Thresholded diff → open → dilate → components (CSS px) + changed fraction.
+
+        Also returns the opened diff before dilation (uint8 0/1) for the activity grid.
+        """
         p = self.params.scan
         d = (cv2.absdiff(cur, ref) > p.diff_threshold).astype(np.uint8)
         if p.open_ksize > 1:
             d = cv2.morphologyEx(d, cv2.MORPH_OPEN, np.ones((p.open_ksize, p.open_ksize), np.uint8))
+        opened = d
         dil = max(1, int(round(self.scale.from_css(p.dilate_css, self.image_scale))))
         d = cv2.dilate(d, cv2.getStructuringElement(cv2.MORPH_RECT, (2 * dil + 1, 2 * dil + 1)))
         frac = float(d.mean())  # changed area (as counted in the energy) / frame area
@@ -110,7 +130,19 @@ class Pass1Accumulator:
             out.append(
                 Blob(x=x * f, y=y * f, w=bw * f, h=bh * f, area=area * f * f, top_x=top_x * f)
             )
-        return out, frac
+        return out, frac, opened
+
+    def _cells(self, *diffs: np.ndarray | None) -> np.ndarray:
+        """Cell activity (PLAN-continuous §3.1): ≥ ``cell_active_frac`` of a cell's pixels
+        changed in any of the given opened diffs."""
+        c = self.params.continuous
+        gh, gw = activity_grid_shape(self.frame_css, c.cell_css)
+        act = np.zeros((gh, gw), dtype=bool)
+        for d in diffs:
+            if d is not None:
+                frac = cv2.resize(d.astype(np.float32), (gw, gh), interpolation=cv2.INTER_AREA)
+                act |= frac >= c.cell_active_frac
+        return act
 
     def add(self, t: float, gray: np.ndarray) -> None:
         p = self.params.scan
@@ -127,15 +159,22 @@ class Pass1Accumulator:
         self._history.append(blur)
         if len(self._history) > SLOW_LAG:
             self._history.pop(0)
-        self.slow_blobs.append([] if lagged is None else self._blobs(blur, lagged)[0])
+        slow_d: np.ndarray | None = None
+        if lagged is None:
+            self.slow_blobs.append([])
+        else:
+            slow, _, slow_d = self._blobs(blur, lagged)
+            self.slow_blobs.append(slow)
         if prev is None:
+            self.activity.append(self._cells(slow_d))
             self.blobs.append([])
             self.changed_frac.append(0.0)
             self.shift_css.append(0.0)
             self.response.append(0.0)
             self._prev_f32 = gray.astype(np.float32)
             return
-        frame_blobs, frac = self._blobs(blur, prev, top_rows=True)
+        frame_blobs, frac, fast_d = self._blobs(blur, prev, top_rows=True)
+        self.activity.append(self._cells(fast_d, slow_d))
         self.blobs.append(frame_blobs)
         self.changed_frac.append(frac)
         cur_f32 = gray.astype(np.float32)
@@ -143,7 +182,9 @@ class Pass1Accumulator:
         if frac > p.global_area_frac and self._prev_f32 is not None:
             if self._window is None or self._window.shape != gray.shape:
                 self._window = cv2.createHanningWindow((w, h), cv2.CV_32F)
-            (sx, sy), resp = cv2.phaseCorrelate(self._prev_f32, cur_f32, self._window)
+            # OpenCV 5 multiplies both inputs by the window **in place**: pass copies, or
+            # ``cur_f32`` (kept as the next frame's reference) would be windowed twice.
+            (sx, sy), resp = cv2.phaseCorrelate(self._prev_f32.copy(), cur_f32.copy(), self._window)
             shift = self._to_css(math.hypot(sx, sy))
         self._prev_f32 = cur_f32
         self.shift_css.append(shift)
@@ -166,6 +207,7 @@ class Pass1Accumulator:
             if self._prev_blur is not None
             else self.image_scale,
             frame_css=self.frame_css,
+            activity=np.stack(self.activity),
         )
 
 
@@ -274,11 +316,15 @@ class _ThumbCtx:
     times: np.ndarray
     k: float  # thumb px per CSS px
     cursor: CursorTrack
+    ambient: list[Rect] = field(default_factory=list)  # masked regions (PLAN-continuous §3.4)
 
     def cursor_valid(self, idx: list[int]) -> np.ndarray:
-        """True where no cursor box (of the given frames) covers the thumbnail pixel."""
+        """True where no cursor box (of the given frames) nor ambient mask covers the pixel."""
         h, w = self.thumbs.shape[1:]
         valid = np.ones((h, w), dtype=bool)
+        for r in self.ambient:
+            ys, xs = _roi_px(r, self.k, (h, w))
+            valid[ys, xs] = False
         if not self.cursor.boxes_css:
             return valid
         for i in idx:
@@ -303,22 +349,156 @@ class _ThumbCtx:
 
 
 # --------------------------------------------------------------------------------------------
+# Ambient masking (PLAN-continuous §3.4)
+# --------------------------------------------------------------------------------------------
+
+
+def ambient_mask_rects(
+    ambient: Sequence[AmbientRegion | Rect], frame_css: tuple[float, float], params: MeasureParams
+) -> list[Rect]:
+    """Ambient regions as CSS rects grown by ``ambient_mask_dilate_css``, clamped to the frame."""
+    pad = params.continuous.ambient_mask_dilate_css
+    out: list[Rect] = []
+    for a in ambient:
+        r = a.rect_css if isinstance(a, AmbientRegion) else a
+        c = r.padded(pad).clamped(*frame_css)
+        if c.area > 0:
+            out.append(c)
+    return out
+
+
+def subtract_masks(r: Rect, masks: Sequence[Rect]) -> tuple[float, Rect | None]:
+    """``(fraction of r's area outside every mask, bbox of that remainder or None)``.
+
+    Exact for axis-aligned rects (coordinate compression over the mask edges inside ``r``).
+    """
+    hits = [m for m in masks if r.intersection(m) is not None]
+    if not hits:
+        return 1.0, r
+    if r.area <= 0:
+        return 0.0, None
+    xs = sorted({r.x, r.x2, *(v for m in hits for v in (m.x, m.x2) if r.x < v < r.x2)})
+    ys = sorted({r.y, r.y2, *(v for m in hits for v in (m.y, m.y2) if r.y < v < r.y2)})
+    kept = 0.0
+    bx0 = by0 = math.inf
+    bx1 = by1 = -math.inf
+    for x0, x1 in zip(xs[:-1], xs[1:], strict=True):
+        cx = (x0 + x1) / 2.0
+        for y0, y1 in zip(ys[:-1], ys[1:], strict=True):
+            cy = (y0 + y1) / 2.0
+            if any(m.x <= cx <= m.x2 and m.y <= cy <= m.y2 for m in hits):
+                continue
+            kept += (x1 - x0) * (y1 - y0)
+            bx0, by0, bx1, by1 = min(bx0, x0), min(by0, y0), max(bx1, x1), max(by1, y1)
+    if kept <= 0:
+        return 0.0, None
+    return kept / r.area, Rect(bx0, by0, bx1 - bx0, by1 - by0)
+
+
+@dataclass(frozen=True, slots=True)
+class _MaskedBlob:
+    area: float  # CSS px² outside the masks
+    rect: Rect  # bbox of the unmasked part
+
+
+def _mask_blobs(blobs: list[list[Blob]], masks: Sequence[Rect]) -> list[list[_MaskedBlob | None]]:
+    """Per blob: its unmasked area/box, or None when the blob lies entirely inside the masks."""
+    out: list[list[_MaskedBlob | None]] = []
+    for fb in blobs:
+        row: list[_MaskedBlob | None] = []
+        for b in fb:
+            keep, box = subtract_masks(b.rect, masks)
+            row.append(None if box is None else _MaskedBlob(b.area * keep, box))
+        out.append(row)
+    return out
+
+
+def masked_cursor_track(
+    stats: Pass1Stats, ambient: Sequence[AmbientRegion | Rect], params: MeasureParams
+) -> CursorTrack:
+    """Cursor track with the blobs lying entirely inside the (grown) ambient regions removed.
+
+    Content moving inside a scroller forms pointer-like tracks and makes every frame "busy"
+    (``cursor.MAX_BIG_FRAC``), so the pointer is only tracked outside the regions; while it is
+    over a region it is unseen (``continuous.phases`` infers that occupancy from where the
+    track is lost / found again).
+    """
+    masks = ambient_mask_rects(ambient, stats.frame_css, params) if ambient else []
+    blobs = stats.blobs
+    if masks:
+        blobs = [
+            [b for b, mb in zip(fb, row, strict=True) if mb is not None]
+            for fb, row in zip(stats.blobs, _mask_blobs(stats.blobs, masks), strict=True)
+        ]
+    return build_cursor_track(blobs, stats.times, params)[0]
+
+
+def _masked_changed_frac(
+    stats: Pass1Stats, masked: list[list[_MaskedBlob | None]], masks: Sequence[Rect]
+) -> np.ndarray:
+    """Changed fraction of the frame area outside the masks (global-motion check, §3.4).
+
+    The dilated-diff components partition the changed pixels, so Σ blob areas == changed area.
+    """
+    fw, fh = stats.frame_css
+    keep, _ = subtract_masks(Rect(0.0, 0.0, fw, fh), masks)
+    free = keep * fw * fh
+    out = np.zeros(len(masked), dtype=np.float64)
+    if free <= 0:
+        return out
+    for i, row in enumerate(masked):
+        out[i] = sum(mb.area for mb in row if mb is not None) / free
+    return out
+
+
+# --------------------------------------------------------------------------------------------
 # Result assembly
 # --------------------------------------------------------------------------------------------
 
 
-def build_scan_result(stats: Pass1Stats, scale: Scale, params: MeasureParams) -> ScanResult:
-    """Cursor separation → energy → segments → global check → pairing → primary."""
+def build_scan_result(
+    stats: Pass1Stats,
+    scale: Scale,
+    params: MeasureParams,
+    ambient: Sequence[AmbientRegion | Rect] | None = None,
+) -> ScanResult:
+    """Cursor separation → energy → segments → global check → pairing → primary.
+
+    ``ambient`` (PLAN-continuous §3.4): regions moving from the start, masked out (grown by
+    ``ambient_mask_dilate_css``): blob areas shrink by their masked fraction, blobs entirely
+    inside are dropped (also from cursor tracking — content moving inside a scroller would
+    otherwise form pointer-like tracks), ROI boxes cover only the unmasked part, the global
+    check uses the unmasked changed fraction, and pairing ignores masked thumbnail pixels.
+    ``None`` / empty → the transition-only computation, unchanged.
+    """
     p = params.scan
     times = stats.times
     n = len(times)
-    cursor, cursor_sets = build_cursor_track(stats.blobs, times, params)
+    masks = ambient_mask_rects(ambient, stats.frame_css, params) if ambient else []
+    blobs = stats.blobs
+    changed_frac = stats.changed_frac
+    kept: list[list[_MaskedBlob]] = []  # masked mode: unmasked part of each blob in ``blobs``
+    slow_masked: list[list[_MaskedBlob | None]] = []
+    if masks:
+        fast_masked = _mask_blobs(stats.blobs, masks)
+        slow_masked = _mask_blobs(stats.slow_blobs, masks)
+        changed_frac = _masked_changed_frac(stats, fast_masked, masks)
+        blobs = [
+            [b for b, mb in zip(fb, row, strict=True) if mb is not None]
+            for fb, row in zip(stats.blobs, fast_masked, strict=True)
+        ]
+        kept = [[mb for mb in row if mb is not None] for row in fast_masked]
+    cursor, cursor_sets = build_cursor_track(blobs, times, params)
     e_fast = np.zeros(n, dtype=np.float64)
     e_slow = np.zeros(n, dtype=np.float64)
     ui_boxes: list[list[Rect]] = [[] for _ in range(n)]
-    for i, fb in enumerate(stats.blobs):
+    for i, fb in enumerate(blobs):
         for j, b in enumerate(fb):
             if j in cursor_sets[i]:
+                continue
+            if masks:
+                e_fast[i] += kept[i][j].area
+                ui_boxes[i].append(kept[i][j].rect)
                 continue
             e_fast[i] += b.area
             ui_boxes[i].append(b.rect)
@@ -327,16 +507,23 @@ def build_scan_result(stats: Pass1Stats, scale: Scale, params: MeasureParams) ->
     cmax = params.scan.cursor_max_css
     for i, sb in enumerate(stats.slow_blobs):
         span = range(max(0, i - SLOW_LAG), i + 1)
-        crects = [stats.blobs[j][k].rect for j in span for k in cursor_sets[j]]
+        crects = [blobs[j][k].rect for j in span for k in cursor_sets[j]]
         crects += [
             cursor.boxes_css[j]
             for j in span
             if j < len(cursor.boxes_css) and cursor.boxes_css[j] is not None
         ]
-        for b in sb:
+        for j, b in enumerate(sb):
             r = b.rect
             small = b.w <= cmax and b.h <= cmax
             if small and any(r.intersection(c) is not None for c in crects):
+                continue
+            if masks:
+                mb = slow_masked[i][j]
+                if mb is None:
+                    continue
+                e_slow[i] += mb.area
+                ui_boxes[i].append(mb.rect)
                 continue
             e_slow[i] += b.area
             ui_boxes[i].append(r)
@@ -354,7 +541,7 @@ def build_scan_result(stats: Pass1Stats, scale: Scale, params: MeasureParams) ->
             for b in ui_boxes[i]:
                 roi = b if roi is None else roi.union(b)
         assert roi is not None
-        big = [i for i in range(r.i0, r.i1 + 1) if stats.changed_frac[i] > p.global_area_frac]
+        big = [i for i in range(r.i0, r.i1 + 1) if changed_frac[i] > p.global_area_frac]
         glob = [
             i
             for i in big
@@ -403,6 +590,7 @@ def build_scan_result(stats: Pass1Stats, scale: Scale, params: MeasureParams) ->
         times=times,
         k=stats.thumb_scale * scale.pixel_ratio,
         cursor=cursor,
+        ambient=masks,
     )
     primary = choose_primary(segments, stable, ctx, params)
     used = 1 + (1 if primary.reverse is not None else 0)
@@ -500,14 +688,14 @@ def choose_primary(
 # --------------------------------------------------------------------------------------------
 
 
-def scan_video(
+def pass1_stats(
     path: Path,
     probe: ProbeInfo,
     scale: Scale,
     params: MeasureParams,
     ffmpeg_bin: str = "ffmpeg",
-) -> tuple[ScanResult, Pass1Stats]:
-    """Stream pass 1 and build the :class:`ScanResult` (stats returned for debug dumps)."""
+) -> Pass1Stats:
+    """Stream pass 1 into :class:`Pass1Stats` (no segmentation; never raises for "no motion")."""
     g = pass1_geometry(probe, params)
     acc = Pass1Accumulator(
         params=params,
@@ -517,5 +705,16 @@ def scan_video(
     )
     for t, gray in iter_pass1(path, probe, params, ffmpeg_bin):
         acc.add(t, gray)
-    stats = acc.finish()
+    return acc.finish()
+
+
+def scan_video(
+    path: Path,
+    probe: ProbeInfo,
+    scale: Scale,
+    params: MeasureParams,
+    ffmpeg_bin: str = "ffmpeg",
+) -> tuple[ScanResult, Pass1Stats]:
+    """Stream pass 1 and build the :class:`ScanResult` (stats returned for debug dumps)."""
+    stats = pass1_stats(path, probe, scale, params, ffmpeg_bin)
     return build_scan_result(stats, scale, params), stats

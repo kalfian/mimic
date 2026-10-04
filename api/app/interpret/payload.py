@@ -3,6 +3,11 @@
 Shared by ``claude_cli`` and ``openai_compat``: defensive JSON extraction, payload sanitizing
 (PLAN §7.2: unknown ids dropped, strings clipped, control characters stripped, unknown roles ->
 ``other``) and the best-effort ``interpretation_raw.json`` writer with secret redaction.
+
+Continuous mode (PLAN-continuous §4.7): the model only labels. Elements of kind ``scroller``
+always get role ``scroller`` (the schema never offers it, so Layer B cannot put it on another
+element), and the interaction type, its confidence, the target (= the scroller) and the trigger
+text are kept from the heuristic baseline; only ``target_description`` comes from the model.
 """
 
 from __future__ import annotations
@@ -23,6 +28,7 @@ from app.interpret.base import (
     InterpretedElement,
     InterpretedInteraction,
 )
+from app.interpret.prompt import is_continuous
 from app.interpret.schema import (
     INTERACTION_TYPES,
     MAX_NOTES,
@@ -159,6 +165,8 @@ def sanitize_payload(
     order = [e.id for e in inp.elements]
     known = set(order)
     cv_parents = {e.id: e.parent_id for e in inp.elements}
+    continuous = is_continuous(inp)
+    scroller_ids = {e.id for e in inp.elements if e.kind == "scroller"}
 
     got: dict[str, InterpretedElement] = {}
     parents: dict[str, str | None] = {}
@@ -174,7 +182,9 @@ def sanitize_payload(
             label = base.elements[pe.id].label
             issues.append(f"{pe.id}: empty label")
         role = pe.role if pe.role in ROLES else "other"
-        if role != pe.role:
+        if pe.id in scroller_ids:
+            role = "scroller"  # measured kind; the model was told to answer "container"
+        elif role != pe.role:
             issues.append(f"{pe.id}: role {clean_text(pe.role, 30)!r} -> other")
         parent = pe.parent_id
         if parent is not None and (parent not in known or parent == pe.id):
@@ -206,25 +216,28 @@ def sanitize_payload(
         elements[el_id] = src.model_copy(update={"parent_id": parents[el_id]})
 
     pi = payload.interaction
-    itype = pi.type if pi.type in INTERACTION_TYPES else "unknown"
-    type_conf = pi.type_confidence if itype == pi.type else 0.0
-    if itype != pi.type:
-        issues.append(f"interaction type {clean_text(pi.type, 30)!r} -> unknown")
-    target = pi.target_element_id
-    if target is not None and target not in known:
-        issues.append(f"unknown target {clean_text(target, 20)!r} -> heuristic target")
-        target = base.interaction.target_element_id
-    target_desc = clean_text(pi.target_description, DESCRIPTION_MAX) or (
-        elements[target].label if target is not None else None
-    )
-    interaction = InterpretedInteraction(
-        type_confirmation=itype,  # type: ignore[arg-type]
-        type_confidence=type_conf,
-        target_element_id=target,
-        target_description=target_desc,
-        trigger_description=clean_text(pi.trigger_description, DESCRIPTION_MAX)
-        or base.interaction.trigger_description,
-    )
+    if continuous:
+        interaction = _continuous_interaction(payload, base, elements, issues)
+    else:
+        itype = pi.type if pi.type in INTERACTION_TYPES else "unknown"
+        type_conf = pi.type_confidence if itype == pi.type else 0.0
+        if itype != pi.type:
+            issues.append(f"interaction type {clean_text(pi.type, 30)!r} -> unknown")
+        target = pi.target_element_id
+        if target is not None and target not in known:
+            issues.append(f"unknown target {clean_text(target, 20)!r} -> heuristic target")
+            target = base.interaction.target_element_id
+        target_desc = clean_text(pi.target_description, DESCRIPTION_MAX) or (
+            elements[target].label if target is not None else None
+        )
+        interaction = InterpretedInteraction(
+            type_confirmation=itype,  # type: ignore[arg-type]
+            type_confidence=type_conf,
+            target_element_id=target,
+            target_description=target_desc,
+            trigger_description=clean_text(pi.trigger_description, DESCRIPTION_MAX)
+            or base.interaction.trigger_description,
+        )
 
     structure: list[str] = []
     for item in payload.structure:
@@ -248,6 +261,26 @@ def sanitize_payload(
         notes=notes[:MAX_NOTES],
     )
     return result, issues
+
+
+def _continuous_interaction(
+    payload: InterpretationPayload,
+    base: InterpretationResult,
+    elements: dict[str, InterpretedElement],
+    issues: list[str],
+) -> InterpretedInteraction:
+    """Continuous mode: type / confidence / target / trigger stay heuristic (Layer B cannot see
+    velocities, PLAN-continuous §4.7); the model's ``type`` is ignored without a note."""
+    pi = payload.interaction
+    target = base.interaction.target_element_id
+    if pi.target_element_id is not None and pi.target_element_id != target:
+        issues.append(
+            f"target {clean_text(pi.target_element_id, 20)!r} -> scroller {target or '-'}"
+        )
+    target_desc = clean_text(pi.target_description, DESCRIPTION_MAX) or (
+        elements[target].label if target is not None and target in elements else None
+    )
+    return base.interaction.model_copy(update={"target_description": target_desc})
 
 
 # ---- raw record ----------------------------------------------------------------------------------

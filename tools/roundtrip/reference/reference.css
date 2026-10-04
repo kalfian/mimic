@@ -1,0 +1,49 @@
+/* Reference pages for the round-trip harness self-check (PLAN-continuous §14).
+   Geometry and colours follow the synthetic scenes (api/tests/synth/scenarios.py): canvas
+   1280x800 CSS px, page #F3F4F6, header / sidebar / footer chrome, scroller viewport 760x200 at
+   (260, 300), cards 200x160 with a 16 px gap (pitch 216), lead 8 px, 20 px above/below. */
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  position: relative;
+  width: 1280px;
+  height: 800px;
+  overflow: hidden;
+  background: #F3F4F6;
+  font-family: Helvetica, Arial, sans-serif;
+  color: #111827;
+}
+.header {
+  position: absolute; left: 0; top: 0; width: 1280px; height: 56px; background: #FFFFFF;
+}
+.header .logo { position: absolute; left: 24px; top: 17px; font-size: 16px; font-weight: 700; }
+.header nav span { position: absolute; top: 21px; font-size: 11px; color: #4B5563; }
+.sidebar {
+  position: absolute; left: 32px; top: 88px; width: 200px; height: 400px;
+  background: #FFFFFF; border-radius: 10px;
+}
+.sidebar .row { position: absolute; left: 18px; height: 14px; }
+.sidebar .dot { position: absolute; left: 0; top: 0; width: 14px; height: 14px; border-radius: 4px; background: #D1D5DB; }
+.sidebar .label { position: absolute; left: 26px; top: 0; font-size: 11px; line-height: 14px; color: #374151; white-space: nowrap; }
+.footer { position: absolute; left: 32px; top: 762px; font-size: 10px; color: #9CA3AF; }
+
+/* scroller */
+.scroller {
+  position: absolute; left: 260px; top: 300px; width: 760px; height: 200px;
+  background: #E5E7EB; border-radius: 12px; overflow: hidden;
+  touch-action: pan-y; user-select: none; -webkit-user-select: none;
+}
+.scroller.is-draggable { cursor: grab; }
+.scroller.is-dragging { cursor: grabbing; }
+.track {
+  position: absolute; left: 0; top: 0; height: 200px;
+  display: flex; gap: 16px; padding-left: 8px; padding-top: 20px;
+  width: max-content; will-change: transform;
+}
+.card {
+  position: relative; flex: none; width: 200px; height: 160px;
+  background: #FFFFFF; border-radius: 10px;
+}
+.card__img { position: absolute; left: 8px; top: 8px; width: 184px; height: 96px; border-radius: 6px; }
+.card__title { position: absolute; left: 12px; top: 116px; font-size: 13px; font-weight: 600; line-height: 1; color: #111827; white-space: nowrap; }
+.card__sub { position: absolute; left: 12px; top: 138px; font-size: 10px; line-height: 1; color: #6B7280; white-space: nowrap; }

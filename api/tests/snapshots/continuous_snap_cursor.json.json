@@ -1,0 +1,617 @@
+{
+  "schema_version": "0.2",
+  "job_id": "7c41e2a95b0d4f3e8a6c1b2d3e4f5a6b",
+  "meta": {
+    "generated_at": "2026-10-03T10:00:00Z",
+    "pipeline_version": "0.1.0",
+    "estimated": true,
+    "disclaimer": "Values are visual estimates from a screen recording, not source CSS."
+  },
+  "mode": "continuous",
+  "source": {
+    "filename": "carousel-drag.mov",
+    "container": "mov",
+    "codec": "h264",
+    "width": 2880,
+    "height": 1800,
+    "duration_ms": 9300,
+    "fps_nominal": 60.0,
+    "fps_effective": 60.0,
+    "is_vfr": false,
+    "pixel_ratio": 2,
+    "pixel_ratio_source": "auto",
+    "timing_resolution_ms": 18
+  },
+  "scene": {
+    "viewport_css": {
+      "w": 1440.0,
+      "h": 900.0
+    },
+    "page_background": {
+      "value": "#FFFFFF",
+      "confidence": {
+        "value": 0.9,
+        "band": "high"
+      }
+    }
+  },
+  "interaction": {
+    "type": "drag",
+    "type_source": "interpreter",
+    "type_confidence": {
+      "value": 0.85,
+      "band": "high"
+    },
+    "pattern": "carousel",
+    "target_element_id": "e1",
+    "target_label": "Product carousel (e1)",
+    "target_description": null,
+    "trigger": {
+      "kind": "drag",
+      "reverse_kind": "none",
+      "description": "Hovering pauses the carousel; dragging moves it, then it snaps.",
+      "confidence": {
+        "value": 0.85,
+        "band": "high"
+      }
+    },
+    "direction": "continuous",
+    "total_duration_ms": {
+      "forward": 8000,
+      "reverse": null
+    }
+  },
+  "elements": [
+    {
+      "id": "e1",
+      "label": "Product carousel (e1)",
+      "label_source": "interpreter",
+      "role": "scroller",
+      "parent_id": null,
+      "kind": "scroller",
+      "bbox_initial": {
+        "x": 120.0,
+        "y": 200.0,
+        "w": 1200.0,
+        "h": 240.0
+      },
+      "bbox_active": {
+        "x": 120.0,
+        "y": 200.0,
+        "w": 1200.0,
+        "h": 240.0
+      },
+      "text_like": false,
+      "static": {
+        "border_radius_px": null,
+        "shadow": null
+      }
+    },
+    {
+      "id": "e2",
+      "label": "Product card (e2)",
+      "label_source": "interpreter",
+      "role": "card",
+      "parent_id": "e1",
+      "kind": "transform",
+      "bbox_initial": {
+        "x": 136.0,
+        "y": 240.0,
+        "w": 200.0,
+        "h": 160.0
+      },
+      "bbox_active": {
+        "x": 136.0,
+        "y": 240.0,
+        "w": 200.0,
+        "h": 160.0
+      },
+      "text_like": false,
+      "static": {
+        "border_radius_px": {
+          "value": 8.0,
+          "confidence": {
+            "value": 0.6,
+            "band": "medium"
+          }
+        },
+        "shadow": {
+          "value": {
+            "x": 0.0,
+            "y": 4.0,
+            "blur": 12.0,
+            "spread": 0.0,
+            "rgba": [
+              0,
+              0,
+              0,
+              0.08
+            ]
+          },
+          "confidence": {
+            "value": 0.5,
+            "band": "medium"
+          }
+        },
+        "background_color": {
+          "value": "#F4F4F6",
+          "confidence": {
+            "value": 0.8,
+            "band": "high"
+          }
+        }
+      }
+    },
+    {
+      "id": "e3",
+      "label": "Card title (e3)",
+      "label_source": "interpreter",
+      "role": "title",
+      "parent_id": "e2",
+      "kind": "transform",
+      "bbox_initial": {
+        "x": 152.0,
+        "y": 252.0,
+        "w": 120.0,
+        "h": 20.0
+      },
+      "bbox_active": {
+        "x": 152.0,
+        "y": 252.0,
+        "w": 120.0,
+        "h": 20.0
+      },
+      "text_like": true,
+      "static": {
+        "border_radius_px": null,
+        "shadow": null,
+        "text_color": {
+          "value": "#222222",
+          "confidence": {
+            "value": 0.2,
+            "band": "low"
+          }
+        },
+        "font_size_px": {
+          "value": 14.0,
+          "confidence": {
+            "value": 0.5,
+            "band": "medium"
+          }
+        }
+      }
+    }
+  ],
+  "segments": [],
+  "transitions": [],
+  "relationships": [],
+  "continuous": {
+    "element_id": "e1",
+    "axis": "x",
+    "region": {
+      "x": 120.0,
+      "y": 200.0,
+      "w": 1200.0,
+      "h": 240.0
+    },
+    "region_confidence": {
+      "value": 0.75,
+      "band": "medium"
+    },
+    "sign_convention": "positive = content moves right (x) / down (y)",
+    "autoplay": {
+      "direction": "left",
+      "speed_px_s": {
+        "value": 40.0,
+        "confidence": {
+          "value": 0.9,
+          "band": "high"
+        }
+      },
+      "velocity_px_s": -40.0,
+      "easing": "linear",
+      "loop": {
+        "observed": false,
+        "period_px": null,
+        "duration_ms": null
+      }
+    },
+    "pitch_px": {
+      "value": 216.0,
+      "confidence": {
+        "value": 0.8,
+        "band": "high"
+      }
+    },
+    "gap_px": null,
+    "phases": [
+      {
+        "id": "p1",
+        "kind": "autoplay",
+        "start_ms": 0,
+        "end_ms": 2000,
+        "v_start_px_s": -40.0,
+        "v_end_px_s": -40.0,
+        "v_peak_px_s": -40.0,
+        "displacement_px": -80.0,
+        "fit": {
+          "model": "constant",
+          "velocity_px_s": {
+            "value": -40.0,
+            "confidence": {
+              "value": 0.9,
+              "band": "high"
+            }
+          }
+        },
+        "interrupted": false,
+        "evidence": "velocity",
+        "confidence": {
+          "value": 0.9,
+          "band": "high"
+        },
+        "notes": []
+      },
+      {
+        "id": "p2",
+        "kind": "decelerate",
+        "start_ms": 2000,
+        "end_ms": 2400,
+        "v_start_px_s": -40.0,
+        "v_end_px_s": 0.0,
+        "v_peak_px_s": -40.0,
+        "displacement_px": -10.0,
+        "fit": {
+          "model": "ramp",
+          "from_px_s": -40.0,
+          "to_px_s": 0.0,
+          "duration_ms": {
+            "value": 400.0,
+            "confidence": {
+              "value": 0.8,
+              "band": "high"
+            }
+          },
+          "easing": {
+            "keyword": "ease-out",
+            "cubic_bezier": [
+              0.0,
+              0.0,
+              0.58,
+              1.0
+            ],
+            "nearest_named": "ease-out",
+            "family": "ease-out",
+            "rmse": 0.03,
+            "flags": []
+          }
+        },
+        "interrupted": false,
+        "evidence": "velocity+cursor",
+        "confidence": {
+          "value": 0.85,
+          "band": "high"
+        },
+        "notes": []
+      },
+      {
+        "id": "p3",
+        "kind": "paused",
+        "start_ms": 2400,
+        "end_ms": 2600,
+        "v_start_px_s": 0.0,
+        "v_end_px_s": 0.0,
+        "v_peak_px_s": 0.0,
+        "displacement_px": 0.0,
+        "fit": null,
+        "interrupted": false,
+        "evidence": "velocity",
+        "confidence": {
+          "value": 0.8,
+          "band": "high"
+        },
+        "notes": []
+      },
+      {
+        "id": "p4",
+        "kind": "drag",
+        "start_ms": 2600,
+        "end_ms": 3000,
+        "v_start_px_s": 0.0,
+        "v_end_px_s": -700.0,
+        "v_peak_px_s": -800.0,
+        "displacement_px": -200.0,
+        "fit": null,
+        "interrupted": false,
+        "evidence": "cursor",
+        "confidence": {
+          "value": 0.85,
+          "band": "high"
+        },
+        "notes": []
+      },
+      {
+        "id": "p5",
+        "kind": "snap",
+        "start_ms": 3000,
+        "end_ms": 3300,
+        "v_start_px_s": -700.0,
+        "v_end_px_s": 0.0,
+        "v_peak_px_s": -700.0,
+        "displacement_px": -16.0,
+        "fit": {
+          "model": "tween",
+          "distance_px": {
+            "value": -16.0,
+            "confidence": {
+              "value": 0.7,
+              "band": "medium"
+            }
+          },
+          "duration_ms": {
+            "value": 300.0,
+            "confidence": {
+              "value": 0.75,
+              "band": "medium"
+            }
+          },
+          "easing": {
+            "keyword": "ease-out",
+            "cubic_bezier": [
+              0.0,
+              0.0,
+              0.58,
+              1.0
+            ],
+            "nearest_named": "ease-out",
+            "family": "ease-out",
+            "rmse": 0.03,
+            "flags": []
+          }
+        },
+        "interrupted": false,
+        "evidence": "velocity",
+        "confidence": {
+          "value": 0.75,
+          "band": "medium"
+        },
+        "notes": []
+      },
+      {
+        "id": "p6",
+        "kind": "paused",
+        "start_ms": 3300,
+        "end_ms": 3700,
+        "v_start_px_s": 0.0,
+        "v_end_px_s": 0.0,
+        "v_peak_px_s": 0.0,
+        "displacement_px": 0.0,
+        "fit": null,
+        "interrupted": false,
+        "evidence": "velocity",
+        "confidence": {
+          "value": 0.8,
+          "band": "high"
+        },
+        "notes": []
+      },
+      {
+        "id": "p7",
+        "kind": "resume",
+        "start_ms": 3700,
+        "end_ms": 4300,
+        "v_start_px_s": 0.0,
+        "v_end_px_s": -40.0,
+        "v_peak_px_s": -40.0,
+        "displacement_px": -12.0,
+        "fit": {
+          "model": "ramp",
+          "from_px_s": 0.0,
+          "to_px_s": -40.0,
+          "duration_ms": {
+            "value": 600.0,
+            "confidence": {
+              "value": 0.7,
+              "band": "medium"
+            }
+          },
+          "easing": {
+            "keyword": null,
+            "cubic_bezier": [
+              0.65,
+              0.0,
+              0.35,
+              1.0
+            ],
+            "nearest_named": "easeInOutCubic",
+            "family": "ease-in-out",
+            "rmse": 0.03,
+            "flags": []
+          }
+        },
+        "interrupted": false,
+        "evidence": "velocity",
+        "confidence": {
+          "value": 0.7,
+          "band": "medium"
+        },
+        "notes": []
+      },
+      {
+        "id": "p8",
+        "kind": "autoplay",
+        "start_ms": 4300,
+        "end_ms": 8000,
+        "v_start_px_s": -40.0,
+        "v_end_px_s": -40.0,
+        "v_peak_px_s": -40.0,
+        "displacement_px": -148.0,
+        "fit": {
+          "model": "constant",
+          "velocity_px_s": {
+            "value": -40.0,
+            "confidence": {
+              "value": 0.9,
+              "band": "high"
+            }
+          }
+        },
+        "interrupted": false,
+        "evidence": "velocity",
+        "confidence": {
+          "value": 0.9,
+          "band": "high"
+        },
+        "notes": []
+      }
+    ],
+    "behavior": {
+      "pause": {
+        "on": "hover",
+        "on_confidence": {
+          "value": 0.85,
+          "band": "high"
+        },
+        "decel_ms": {
+          "value": 400.0,
+          "confidence": {
+            "value": 0.8,
+            "band": "high"
+          }
+        },
+        "easing": {
+          "keyword": "ease-out",
+          "cubic_bezier": [
+            0.0,
+            0.0,
+            0.58,
+            1.0
+          ],
+          "nearest_named": "ease-out",
+          "family": "ease-out",
+          "rmse": 0.03,
+          "flags": []
+        },
+        "stops_completely": true
+      },
+      "drag": {
+        "count": 1,
+        "follows_pointer": true,
+        "pointer_ratio": {
+          "value": 1.0,
+          "confidence": {
+            "value": 0.85,
+            "band": "high"
+          }
+        },
+        "peak_speed_px_s": {
+          "value": 800.0,
+          "confidence": {
+            "value": 0.8,
+            "band": "high"
+          }
+        }
+      },
+      "inertia": null,
+      "snap": {
+        "kind": "grid",
+        "step_px": {
+          "value": 216.0,
+          "confidence": {
+            "value": 0.8,
+            "band": "high"
+          }
+        },
+        "duration_ms": {
+          "value": 300.0,
+          "confidence": {
+            "value": 0.75,
+            "band": "medium"
+          }
+        },
+        "easing": {
+          "keyword": "ease-out",
+          "cubic_bezier": [
+            0.0,
+            0.0,
+            0.58,
+            1.0
+          ],
+          "nearest_named": "ease-out",
+          "family": "ease-out",
+          "rmse": 0.03,
+          "flags": []
+        },
+        "overshoot": false
+      },
+      "resume": {
+        "delay_after_rest_ms": {
+          "value": 400.0,
+          "confidence": {
+            "value": 0.7,
+            "band": "medium"
+          }
+        },
+        "delay_after_release_ms": {
+          "value": 700.0,
+          "confidence": {
+            "value": 0.6,
+            "band": "medium"
+          }
+        },
+        "ramp_ms": {
+          "value": 600.0,
+          "confidence": {
+            "value": 0.7,
+            "band": "medium"
+          }
+        },
+        "easing": {
+          "keyword": null,
+          "cubic_bezier": [
+            0.65,
+            0.0,
+            0.35,
+            1.0
+          ],
+          "nearest_named": "easeInOutCubic",
+          "family": "ease-in-out",
+          "rmse": 0.03,
+          "flags": []
+        },
+        "to_speed_px_s": 40.0,
+        "direction_preserved": true
+      }
+    },
+    "span_ms": {
+      "start_ms": 0,
+      "end_ms": 8000
+    }
+  },
+  "cursor": {
+    "visible": true,
+    "confidence": 0.9,
+    "events": [
+      {
+        "t_ms": 1990,
+        "kind": "enter",
+        "element_id": "e1"
+      },
+      {
+        "t_ms": 3400,
+        "kind": "leave",
+        "element_id": "e1"
+      }
+    ]
+  },
+  "structure": [],
+  "interpretation": {
+    "provider": "claude_cli",
+    "model": "sonnet",
+    "status": "ok",
+    "duration_ms": 4200
+  },
+  "warnings": [],
+  "initial_state": {},
+  "active_state": {}
+}

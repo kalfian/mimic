@@ -1,0 +1,72 @@
+/* Suggested implementation — estimated from a screen recording, not the original CSS. */
+/* All values are approximate; display scale assumed 2x. */
+/* Sizes and colors measured at the recorded 1440 x 900px viewport. */
+
+body {
+  background-color: #F3F4F6; /* estimated, high confidence */
+}
+
+.product-card {
+  width: 320px;
+  height: 400px;
+  background-color: #FFFFFF; /* estimated, high confidence */
+  border-radius: 12px; /* estimated, low confidence */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); /* estimated, low confidence */
+  transition:
+    translate 220ms ease-in-out,
+    box-shadow 220ms ease-in-out;
+}
+
+.product-card:hover {
+  translate: 0 -8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16); /* estimated, low confidence */
+  transition:
+    translate 280ms ease-out,
+    box-shadow 280ms ease-out;
+}
+
+.product-card__image {
+  transform-origin: center;
+  width: 320px;
+  height: 200px;
+  background-color: #C7D2FE; /* estimated, low confidence */
+  transition: scale 220ms ease-in-out;
+}
+
+.product-card:hover .product-card__image {
+  scale: 1.06;
+  transition: scale 320ms cubic-bezier(0.16, 1, 0.3, 1) 30ms;
+}
+
+.product-card__title {
+  font-size: 18px; /* estimated, low confidence */
+  color: #111111;
+  transition: color 180ms ease;
+}
+
+.product-card:hover .product-card__title {
+  color: #5252FF;
+  transition: color 200ms ease;
+}
+
+.product-card__arrow-icon {
+  width: 20px;
+  height: 20px;
+  opacity: 0.7; /* low confidence */
+  transition:
+    translate 180ms ease-in-out,
+    opacity 180ms ease-in-out;
+}
+
+.product-card:hover .product-card__arrow-icon {
+  translate: 4px 0;
+  opacity: 1; /* low confidence */
+  transition:
+    translate 200ms ease-out 80ms,
+    opacity 200ms ease-out 80ms;
+}
+
+.product-card__description {
+  color: #6B7280; /* estimated, medium confidence */
+  font-size: 14px; /* estimated, medium confidence */
+}

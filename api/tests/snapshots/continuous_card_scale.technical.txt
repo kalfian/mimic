@@ -1,0 +1,85 @@
+CONTINUOUS MOTION
+
+Scroller: Scroller (e1) — carousel, horizontal (x axis)
+Type: Draggable scroller (carousel) — medium confidence (75%), from heuristic
+Trigger: Autoplaying scroller that is dragged by the pointer; after release it coasts, then autoplay resumes.
+Trigger kind: drag — medium confidence (60%)
+Region: 760×200 px at x 260, y 300 — medium (70%)
+Card pitch (card + gap) at the scroller centre: ≈216 px — medium (70%)
+Gap between cards: ≈16 px — medium (50%)
+Card scaling: by distance from the scroller centre, ×1 at the centre → ≈×1.15 at ≈270 px from it (quadratic, cards stay packed; visible cards only, off-screen cards unscaled); on screen the content moves ≈×1.10 as fast as the unscaled track — medium (60%)
+Analysed span: 0–9300 ms (≈9300 ms)
+
+AUTOPLAY
+
+Direction: right (content moves to the right)
+Speed: ≈39 px/s, linear — high (90%)
+Loop: not observed (the content did not repeat within the recording)
+
+PHASES
+
+#    Kind                      Time (ms)  Velocity (px/s)  Key value                                             Confidence
+p1   autoplay                  0–1500     +39 → +39        constant ≈39 px/s                                     high (90%)
+p2   decelerate (interrupted)  1500–2000  +39 → +11        ramp +39 → 0 px/s over ≈700 ms (low), linear          medium (55%)
+p3   drag                      2000–2500  +11 → -1400      peak -1500 px/s                                       high (80%)
+p4   inertia                   2500–3750  -1400 → -3       τ ≈200 ms, v0 -1400 px/s                              high (80%)
+p5   drag                      3750–5000  -3 → -750        peak -850 px/s                                        high (80%)
+p6   inertia (interrupted)     5000–5500  -750 → -69       τ ≈210 ms (medium), v0 -750 px/s                      medium (70%)
+p7   drag                      5500–6300  -69 → +900       peak +990 px/s                                        high (80%)
+p8   inertia (interrupted)     6300–7000  +900 → +23       τ ≈190 ms (medium), v0 +900 px/s                      medium (75%)
+p9   drag                      7000–7600  +23 → -1650      peak -1720 px/s                                       high (80%)
+p10  stop                      7600–7750  -1650 → 0        —                                                     low (45%)
+p11  paused                    7750–7850  0 → 0            —                                                     medium (60%)
+p12  resume                    7850–8600  0 → +39          ramp 0 → +39 px/s over ≈750 ms (medium), ease-in-out  medium (70%)
+p13  autoplay                  8600–9300  +39 → +39        constant ≈39 px/s                                     high (85%)
+
+Phase notes:
+- p2: cut short by a drag before reaching zero
+- p3: tracking degraded during fast motion
+- p6: re-grabbed before coming to rest
+- p8: re-grabbed before coming to rest
+- p9: tracking degraded during fast motion
+- p10: pointer likely stopped before release, or hard snap (ambiguous without cursor)
+
+BEHAVIOUR
+
+Pause: on hover or press (trigger not visible in the recording) — low (35%)
+  Slowdown: possibly ≈700 ms, linear — low (40%)
+  Comes to a full stop: no (cut short by the next interaction in the recording)
+Drag: 4 drags
+  Follows the pointer: unknown (no cursor visible to compare)
+  Peak speed: ≈1720 px/s — medium (75%)
+Momentum (inertia): exponential decay, 3 releases
+  Time constant τ: ≈200 ms — high (80%)
+  Release speeds: ≈750–1400 px/s
+Snap: abrupt stops without grid evidence (a snap, or the pointer stopping before release; ambiguous without a visible cursor)
+  Overshoot: no
+Resume:
+  Delay after rest: ≈100 ms — medium (50%)
+  Delay after release: possibly ≈250 ms — low (45%)
+  Ramp: ≈750 ms, ease-in-out — medium (70%)
+  Speed after resuming: ≈39 px/s, same direction
+
+APPEARANCE
+
+Viewport: 1280×800 px (recorded frame)
+Page background: #FAFAFA — high (80%)
+Scroller (e1): 760×200 px at x 260, y 300; background #F1F1F4 — medium (70%)
+Card (e2): 200×160 px (at the scroller centre; scales with its position), vertically centred in the scroller; background #FFFFFF — medium (75%); corner radius possibly ≈12 px — low (45%)
+Text (e3): 120×20 px, lower part of the card; text colour #1A1A1A — medium (60%); font size possibly ≈16 px — low (35%)
+
+UNCERTAIN OBSERVATIONS
+
+None.
+
+NOTES
+
+- Values are visual estimates from a screen recording, not source CSS.
+- Geometry is in CSS px; display scale assumed 1x from the 1280x800 recording.
+- Timing resolution: about 18ms per frame (55.7 fps effective).
+- Signed velocities: positive = content moves right (x) / down (y).
+- Element labels are heuristic (AI labeling status: disabled).
+- No cursor was visible; what starts and stops the motion is inferred from the motion only.
+- The recording has a variable frame rate; frame timestamps were used as recorded.
+- About 12% of frames during the fast drags (p3, p9) could not be tracked precisely; their values are less certain.
+- The content never repeated within the recording, so the loop length is not known.

@@ -1,0 +1,49 @@
+CONTINUOUS MOTION
+
+Scroller: Scroller (e1) — marquee, horizontal (x axis)
+Type: Continuous autoplay (marquee) — high confidence (85%), from heuristic
+Trigger: Logo strip that scrolls on its own; no interaction recorded.
+Trigger kind: autoplay — high confidence (90%)
+Region: 760×200 px at x 260, y 300 — medium (70%)
+Card pitch (card + gap): ≈216 px — medium (75%)
+Gap between cards: ≈16 px — medium (60%)
+Analysed span: 0–8000 ms (≈8000 ms)
+
+AUTOPLAY
+
+Direction: left (content moves to the left)
+Speed: ≈240 px/s, linear — high (92%)
+Loop: one copy ≈864 px — high (90%); one loop ≈3600 ms — high (88%)
+
+PHASES
+
+#   Kind      Time (ms)  Velocity (px/s)  Key value           Confidence
+p1  autoplay  0–8000     -240 → -240      constant ≈240 px/s  high (92%)
+
+BEHAVIOUR
+
+Pause: not observed
+Drag: not observed
+Momentum (inertia): not observed
+Snap: not observed
+Resume: not observed
+
+APPEARANCE
+
+Viewport: 1280×800 px (recorded frame)
+Page background: #FAFAFA — high (80%)
+Scroller (e1): 760×200 px at x 260, y 300; background #F1F1F4 — medium (70%)
+Card (e2): 200×160 px, vertically centred in the scroller; background #FFFFFF — medium (75%); corner radius possibly ≈12 px — low (45%)
+Text (e3): 120×20 px, lower part of the card; text colour #1A1A1A — medium (60%); font size possibly ≈16 px — low (35%)
+
+UNCERTAIN OBSERVATIONS
+
+None.
+
+NOTES
+
+- Values are visual estimates from a screen recording, not source CSS.
+- Geometry is in CSS px; display scale assumed 1x from the 1280x800 recording.
+- Timing resolution: about 18ms per frame (55.7 fps effective).
+- Signed velocities: positive = content moves right (x) / down (y).
+- Element labels are heuristic (AI labeling status: disabled).

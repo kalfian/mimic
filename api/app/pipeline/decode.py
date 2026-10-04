@@ -445,3 +445,119 @@ def subsample_warning(windows: list[tuple[str, int, int, float]]) -> SpecWarning
             "precise."
         ),
     )
+
+
+# --------------------------------------------------------------------------------------------
+# Continuous mode: streaming full-rate region reader (PLAN-continuous §4.1)
+# --------------------------------------------------------------------------------------------
+
+
+#: ``iter_region``: a run of duplicate frames still yields one frame this often (s).
+REST_SAMPLE_S = 0.1
+
+
+def iter_region(
+    path: Path,
+    probe: ProbeInfo,
+    scale: Scale,
+    crop_css: Rect,
+    params: MeasureParams,
+    max_fps: float = 60.0,
+    *,
+    skip_dups: bool = True,
+    warnings: list[SpecWarning] | None = None,
+    ffmpeg_bin: str = "ffmpeg",
+) -> Iterator[tuple[float, np.ndarray]]:
+    """Stream ``(t_s, gray float32 (h, w))`` crops of ``crop_css`` over the **whole** video.
+
+    * Native timestamps (``-fps_mode passthrough``), analysis resolution, gray; the crop is
+      applied inside ffmpeg. Frame ``i`` maps to ``probe.frame_ts[i]``; when the probe's
+      timestamps are estimated or run out, a uniform grid continues them and
+      ``timestamps_estimated`` is appended to ``warnings`` (same consistency rule as
+      :func:`decode_windows`, decided while streaming).
+    * Above ``max_fps`` every k-th frame is kept (k = ceil(fps_effective / max_fps)).
+    * ``skip_dups``: frames whose max-abs-diff vs the previous **kept** frame is
+      ``<= params.continuous.dup_max_abs_diff`` are skipped (recorder duplicates are not
+      zero-velocity samples; the next real frame spans the merged dt). A run of duplicates
+      longer than ``REST_SAMPLE_S`` is a rest: one of its frames is yielded every
+      ``REST_SAMPLE_S`` and the last one at the end of the stream (the tracker turns them into
+      zero steps).
+    * Nothing is retained beyond the previous frame.
+
+    The crop is snapped to analysis px exactly like :func:`crop_rect_css` with zero padding;
+    callers get the identical rect from ``crop_rect_css([crop_css], probe, scale, no_pad)``
+    (see ``continuous.measure.region_crop``).
+    """
+    no_pad = dataclasses.replace(
+        params,
+        decode=dataclasses.replace(params.decode, crop_pad_min_css=0.0, crop_pad_frac=0.0),
+    )
+    _, (cx, cy, cw, ch) = crop_rect_css([crop_css], probe, scale, no_pad)
+    aw, ah = analysis_size(probe, scale)
+    filters = []
+    if (aw, ah) != (probe.width, probe.height):
+        filters.append(f"scale={aw}:{ah}:flags=area")
+    filters.append(f"crop={cw}:{ch}:{cx}:{cy}")
+    argv = [
+        ffmpeg_bin, "-v", "error", "-nostdin", "-i", str(path),
+        "-fps_mode", "passthrough", "-vf", ",".join(filters),
+        "-f", "rawvideo", "-pix_fmt", "gray", "-",
+    ]  # fmt: skip
+
+    ts = np.asarray(probe.frame_ts, dtype=np.float64)
+    n_probe = len(ts)
+    t0 = float(ts[0]) if n_probe else 0.0
+    if n_probe > 1:
+        dt_guess = float(np.median(np.diff(ts)))
+    else:
+        dt_guess = 1.0 / max(probe.fps_effective or probe.fps_nominal, 1.0)
+    uniform = probe.timestamps_estimated or n_probe == 0
+    step = 1
+    if probe.fps_effective > max_fps * 1.05:
+        step = int(math.ceil(probe.fps_effective / max_fps))
+    dup_thr = params.continuous.dup_max_abs_diff
+
+    prev: np.ndarray | None = None
+    count = 0
+    overran = False
+    last_t = -math.inf  # time of the last yielded frame
+    held: tuple[float, np.ndarray] | None = None  # latest skipped duplicate
+    for i, raw in enumerate(_stream_raw(argv, cw * ch)):
+        count = i + 1
+        if i % step:
+            continue
+        if uniform:
+            t = t0 + i * dt_guess
+        elif i < n_probe:
+            t = float(ts[i])
+        else:
+            overran = True
+            t = float(ts[-1]) + (i - n_probe + 1) * dt_guess
+        frame = np.frombuffer(raw, dtype=np.uint8).reshape(ch, cw)
+        if skip_dups and prev is not None and int(cv2.absdiff(frame, prev).max()) <= dup_thr:
+            # a long run of duplicates is a rest: still report it every REST_SAMPLE_S (and at
+            # the end of the stream) so a clean encode of a resting scroller is not silent
+            if t - last_t >= REST_SAMPLE_S:
+                last_t = t
+                held = None
+                yield t, frame.astype(np.float32)
+            else:
+                held = (t, frame)
+            continue
+        prev = frame
+        last_t = t
+        held = None
+        yield t, frame.astype(np.float32)
+    if held is not None:
+        yield held[0], held[1].astype(np.float32)
+    if count == 0:
+        raise PipelineError(ErrorCode.DECODE_FAILED, "No frames could be decoded.")
+    if warnings is not None and not probe.timestamps_estimated and (overran or count != n_probe):
+        warnings.append(
+            SpecWarning(
+                code="timestamps_estimated",
+                severity="warn",
+                message="Frame timestamps could not be matched to decoded frames; "
+                "a uniform frame rate was assumed.",
+            )
+        )

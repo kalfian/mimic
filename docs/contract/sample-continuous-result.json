@@ -1,0 +1,1912 @@
+{
+  "job_id": "7c41e2a95b0d4f3e8a6c1b2d3e4f5a6b",
+  "spec": {
+    "schema_version": "0.2",
+    "job_id": "7c41e2a95b0d4f3e8a6c1b2d3e4f5a6b",
+    "meta": {
+      "generated_at": "2026-10-03T10:00:00Z",
+      "pipeline_version": "0.1.0",
+      "estimated": true,
+      "disclaimer": "Values are visual estimates from a screen recording, not source CSS."
+    },
+    "mode": "continuous",
+    "source": {
+      "filename": "carousel-drag.mov",
+      "container": "mov",
+      "codec": "h264",
+      "width": 1280,
+      "height": 800,
+      "duration_ms": 9300,
+      "fps_nominal": 60.0,
+      "fps_effective": 55.7,
+      "is_vfr": true,
+      "pixel_ratio": 1,
+      "pixel_ratio_source": "auto",
+      "timing_resolution_ms": 18
+    },
+    "scene": {
+      "viewport_css": {
+        "w": 1280.0,
+        "h": 800.0
+      },
+      "page_background": {
+        "value": "#FAFAFA",
+        "confidence": {
+          "value": 0.8,
+          "band": "high"
+        }
+      }
+    },
+    "interaction": {
+      "type": "drag",
+      "type_source": "heuristic",
+      "type_confidence": {
+        "value": 0.75,
+        "band": "medium"
+      },
+      "pattern": "carousel",
+      "target_element_id": "e1",
+      "target_label": "Scroller (e1)",
+      "target_description": null,
+      "trigger": {
+        "kind": "drag",
+        "reverse_kind": "none",
+        "description": "Autoplaying scroller that is dragged by the pointer; after release it coasts, then autoplay resumes.",
+        "confidence": {
+          "value": 0.6,
+          "band": "medium"
+        }
+      },
+      "direction": "continuous",
+      "total_duration_ms": {
+        "forward": 9300,
+        "reverse": null
+      }
+    },
+    "elements": [
+      {
+        "id": "e1",
+        "label": "Scroller (e1)",
+        "label_source": "heuristic",
+        "role": "scroller",
+        "parent_id": null,
+        "kind": "scroller",
+        "bbox_initial": {
+          "x": 260.0,
+          "y": 300.0,
+          "w": 760.0,
+          "h": 200.0
+        },
+        "bbox_active": {
+          "x": 260.0,
+          "y": 300.0,
+          "w": 760.0,
+          "h": 200.0
+        },
+        "text_like": false,
+        "static": {
+          "border_radius_px": null,
+          "shadow": null,
+          "background_color": {
+            "value": "#F1F1F4",
+            "confidence": {
+              "value": 0.7,
+              "band": "medium"
+            }
+          }
+        }
+      },
+      {
+        "id": "e2",
+        "label": "Card (e2)",
+        "label_source": "heuristic",
+        "role": "card",
+        "parent_id": "e1",
+        "kind": "transform",
+        "bbox_initial": {
+          "x": 268.0,
+          "y": 320.0,
+          "w": 200.0,
+          "h": 160.0
+        },
+        "bbox_active": {
+          "x": 268.0,
+          "y": 320.0,
+          "w": 200.0,
+          "h": 160.0
+        },
+        "text_like": false,
+        "static": {
+          "border_radius_px": {
+            "value": 12.0,
+            "confidence": {
+              "value": 0.45,
+              "band": "low"
+            }
+          },
+          "shadow": null,
+          "background_color": {
+            "value": "#FFFFFF",
+            "confidence": {
+              "value": 0.75,
+              "band": "medium"
+            }
+          }
+        }
+      },
+      {
+        "id": "e3",
+        "label": "Text (e3)",
+        "label_source": "heuristic",
+        "role": "title",
+        "parent_id": "e2",
+        "kind": "transform",
+        "bbox_initial": {
+          "x": 284.0,
+          "y": 440.0,
+          "w": 120.0,
+          "h": 20.0
+        },
+        "bbox_active": {
+          "x": 284.0,
+          "y": 440.0,
+          "w": 120.0,
+          "h": 20.0
+        },
+        "text_like": true,
+        "static": {
+          "border_radius_px": null,
+          "shadow": null,
+          "text_color": {
+            "value": "#1A1A1A",
+            "confidence": {
+              "value": 0.6,
+              "band": "medium"
+            }
+          },
+          "font_size_px": {
+            "value": 16.0,
+            "confidence": {
+              "value": 0.35,
+              "band": "low"
+            }
+          }
+        }
+      }
+    ],
+    "segments": [],
+    "transitions": [],
+    "relationships": [],
+    "continuous": {
+      "element_id": "e1",
+      "axis": "x",
+      "region": {
+        "x": 260.0,
+        "y": 300.0,
+        "w": 760.0,
+        "h": 200.0
+      },
+      "region_confidence": {
+        "value": 0.7,
+        "band": "medium"
+      },
+      "sign_convention": "positive = content moves right (x) / down (y)",
+      "autoplay": {
+        "direction": "right",
+        "speed_px_s": {
+          "value": 39.0,
+          "confidence": {
+            "value": 0.9,
+            "band": "high"
+          }
+        },
+        "velocity_px_s": 39.0,
+        "easing": "linear",
+        "loop": {
+          "observed": false,
+          "period_px": null,
+          "duration_ms": null
+        }
+      },
+      "pitch_px": {
+        "value": 216.0,
+        "confidence": {
+          "value": 0.7,
+          "band": "medium"
+        }
+      },
+      "gap_px": {
+        "value": 16.0,
+        "confidence": {
+          "value": 0.5,
+          "band": "medium"
+        }
+      },
+      "phases": [
+        {
+          "id": "p1",
+          "kind": "autoplay",
+          "start_ms": 0,
+          "end_ms": 1500,
+          "v_start_px_s": 39.0,
+          "v_end_px_s": 39.0,
+          "v_peak_px_s": 39.0,
+          "displacement_px": 58.5,
+          "fit": {
+            "model": "constant",
+            "velocity_px_s": {
+              "value": 39.0,
+              "confidence": {
+                "value": 0.9,
+                "band": "high"
+              }
+            }
+          },
+          "interrupted": false,
+          "evidence": "velocity",
+          "confidence": {
+            "value": 0.9,
+            "band": "high"
+          },
+          "notes": []
+        },
+        {
+          "id": "p2",
+          "kind": "decelerate",
+          "start_ms": 1500,
+          "end_ms": 2000,
+          "v_start_px_s": 39.0,
+          "v_end_px_s": 11.1,
+          "v_peak_px_s": 39.0,
+          "displacement_px": 12.5,
+          "fit": {
+            "model": "ramp",
+            "from_px_s": 39.0,
+            "to_px_s": 0.0,
+            "duration_ms": {
+              "value": 700.0,
+              "confidence": {
+                "value": 0.4,
+                "band": "low"
+              }
+            },
+            "easing": {
+              "keyword": "linear",
+              "cubic_bezier": [
+                0.0,
+                0.0,
+                1.0,
+                1.0
+              ],
+              "nearest_named": "linear",
+              "family": "linear",
+              "rmse": 0.05,
+              "flags": []
+            }
+          },
+          "interrupted": true,
+          "evidence": "velocity",
+          "confidence": {
+            "value": 0.55,
+            "band": "medium"
+          },
+          "notes": [
+            "cut short by a drag before reaching zero"
+          ]
+        },
+        {
+          "id": "p3",
+          "kind": "drag",
+          "start_ms": 2000,
+          "end_ms": 2500,
+          "v_start_px_s": 11.1,
+          "v_end_px_s": -1400.0,
+          "v_peak_px_s": -1500.0,
+          "displacement_px": -619.2,
+          "fit": null,
+          "interrupted": false,
+          "evidence": "velocity",
+          "confidence": {
+            "value": 0.8,
+            "band": "high"
+          },
+          "notes": [
+            "tracking degraded during fast motion"
+          ]
+        },
+        {
+          "id": "p4",
+          "kind": "inertia",
+          "start_ms": 2500,
+          "end_ms": 3750,
+          "v_start_px_s": -1400.0,
+          "v_end_px_s": -2.7,
+          "v_peak_px_s": -1400.0,
+          "displacement_px": -279.5,
+          "fit": {
+            "model": "exponential",
+            "tau_ms": {
+              "value": 200.0,
+              "confidence": {
+                "value": 0.82,
+                "band": "high"
+              }
+            },
+            "v0_px_s": {
+              "value": -1400.0,
+              "confidence": {
+                "value": 0.7,
+                "band": "medium"
+              }
+            },
+            "v_inf_px_s": 0.0
+          },
+          "interrupted": false,
+          "evidence": "velocity",
+          "confidence": {
+            "value": 0.8,
+            "band": "high"
+          },
+          "notes": []
+        },
+        {
+          "id": "p5",
+          "kind": "drag",
+          "start_ms": 3750,
+          "end_ms": 5000,
+          "v_start_px_s": -2.7,
+          "v_end_px_s": -750.0,
+          "v_peak_px_s": -850.0,
+          "displacement_px": -925.3,
+          "fit": null,
+          "interrupted": false,
+          "evidence": "velocity",
+          "confidence": {
+            "value": 0.8,
+            "band": "high"
+          },
+          "notes": []
+        },
+        {
+          "id": "p6",
+          "kind": "inertia",
+          "start_ms": 5000,
+          "end_ms": 5500,
+          "v_start_px_s": -750.0,
+          "v_end_px_s": -69.3,
+          "v_peak_px_s": -750.0,
+          "displacement_px": -142.9,
+          "fit": {
+            "model": "exponential",
+            "tau_ms": {
+              "value": 210.0,
+              "confidence": {
+                "value": 0.6,
+                "band": "medium"
+              }
+            },
+            "v0_px_s": {
+              "value": -750.0,
+              "confidence": {
+                "value": 0.65,
+                "band": "medium"
+              }
+            },
+            "v_inf_px_s": 0.0
+          },
+          "interrupted": true,
+          "evidence": "velocity",
+          "confidence": {
+            "value": 0.7,
+            "band": "medium"
+          },
+          "notes": [
+            "re-grabbed before coming to rest"
+          ]
+        },
+        {
+          "id": "p7",
+          "kind": "drag",
+          "start_ms": 5500,
+          "end_ms": 6300,
+          "v_start_px_s": -69.3,
+          "v_end_px_s": 900.0,
+          "v_peak_px_s": 990.0,
+          "displacement_px": 562.1,
+          "fit": null,
+          "interrupted": false,
+          "evidence": "velocity",
+          "confidence": {
+            "value": 0.8,
+            "band": "high"
+          },
+          "notes": []
+        },
+        {
+          "id": "p8",
+          "kind": "inertia",
+          "start_ms": 6300,
+          "end_ms": 7000,
+          "v_start_px_s": 900.0,
+          "v_end_px_s": 22.6,
+          "v_peak_px_s": 900.0,
+          "displacement_px": 166.7,
+          "fit": {
+            "model": "exponential",
+            "tau_ms": {
+              "value": 190.0,
+              "confidence": {
+                "value": 0.7,
+                "band": "medium"
+              }
+            },
+            "v0_px_s": {
+              "value": 900.0,
+              "confidence": {
+                "value": 0.68,
+                "band": "medium"
+              }
+            },
+            "v_inf_px_s": 0.0
+          },
+          "interrupted": true,
+          "evidence": "velocity",
+          "confidence": {
+            "value": 0.75,
+            "band": "medium"
+          },
+          "notes": [
+            "re-grabbed before coming to rest"
+          ]
+        },
+        {
+          "id": "p9",
+          "kind": "drag",
+          "start_ms": 7000,
+          "end_ms": 7600,
+          "v_start_px_s": 22.6,
+          "v_end_px_s": -1650.0,
+          "v_peak_px_s": -1719.7,
+          "displacement_px": -718.3,
+          "fit": null,
+          "interrupted": false,
+          "evidence": "velocity",
+          "confidence": {
+            "value": 0.8,
+            "band": "high"
+          },
+          "notes": [
+            "tracking degraded during fast motion"
+          ]
+        },
+        {
+          "id": "p10",
+          "kind": "stop",
+          "start_ms": 7600,
+          "end_ms": 7750,
+          "v_start_px_s": -1650.0,
+          "v_end_px_s": 0.0,
+          "v_peak_px_s": -1650.0,
+          "displacement_px": -27.2,
+          "fit": null,
+          "interrupted": false,
+          "evidence": "velocity",
+          "confidence": {
+            "value": 0.45,
+            "band": "low"
+          },
+          "notes": [
+            "pointer likely stopped before release, or hard snap (ambiguous without cursor)"
+          ]
+        },
+        {
+          "id": "p11",
+          "kind": "paused",
+          "start_ms": 7750,
+          "end_ms": 7850,
+          "v_start_px_s": 0.0,
+          "v_end_px_s": 0.0,
+          "v_peak_px_s": 0.0,
+          "displacement_px": 0.0,
+          "fit": null,
+          "interrupted": false,
+          "evidence": "velocity",
+          "confidence": {
+            "value": 0.6,
+            "band": "medium"
+          },
+          "notes": []
+        },
+        {
+          "id": "p12",
+          "kind": "resume",
+          "start_ms": 7850,
+          "end_ms": 8600,
+          "v_start_px_s": 0.0,
+          "v_end_px_s": 39.0,
+          "v_peak_px_s": 39.0,
+          "displacement_px": 14.6,
+          "fit": {
+            "model": "ramp",
+            "from_px_s": 0.0,
+            "to_px_s": 39.0,
+            "duration_ms": {
+              "value": 750.0,
+              "confidence": {
+                "value": 0.7,
+                "band": "medium"
+              }
+            },
+            "easing": {
+              "keyword": "ease-in-out",
+              "cubic_bezier": [
+                0.42,
+                0.0,
+                0.58,
+                1.0
+              ],
+              "nearest_named": "ease-in-out",
+              "family": "ease-in-out",
+              "rmse": 0.03,
+              "flags": []
+            }
+          },
+          "interrupted": false,
+          "evidence": "velocity",
+          "confidence": {
+            "value": 0.7,
+            "band": "medium"
+          },
+          "notes": []
+        },
+        {
+          "id": "p13",
+          "kind": "autoplay",
+          "start_ms": 8600,
+          "end_ms": 9300,
+          "v_start_px_s": 39.0,
+          "v_end_px_s": 39.0,
+          "v_peak_px_s": 39.0,
+          "displacement_px": 27.3,
+          "fit": {
+            "model": "constant",
+            "velocity_px_s": {
+              "value": 39.0,
+              "confidence": {
+                "value": 0.85,
+                "band": "high"
+              }
+            }
+          },
+          "interrupted": false,
+          "evidence": "velocity",
+          "confidence": {
+            "value": 0.85,
+            "band": "high"
+          },
+          "notes": []
+        }
+      ],
+      "behavior": {
+        "pause": {
+          "on": "unknown",
+          "on_confidence": {
+            "value": 0.35,
+            "band": "low"
+          },
+          "decel_ms": {
+            "value": 700.0,
+            "confidence": {
+              "value": 0.4,
+              "band": "low"
+            }
+          },
+          "easing": {
+            "keyword": "linear",
+            "cubic_bezier": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ],
+            "nearest_named": "linear",
+            "family": "linear",
+            "rmse": 0.05,
+            "flags": []
+          },
+          "stops_completely": false
+        },
+        "drag": {
+          "count": 4,
+          "follows_pointer": null,
+          "pointer_ratio": null,
+          "peak_speed_px_s": {
+            "value": 1720.0,
+            "confidence": {
+              "value": 0.75,
+              "band": "medium"
+            }
+          }
+        },
+        "inertia": {
+          "model": "exponential",
+          "tau_ms": {
+            "value": 200.0,
+            "confidence": {
+              "value": 0.8,
+              "band": "high"
+            }
+          },
+          "duration_ms": null,
+          "easing": null,
+          "release_speed_min_px_s": 750.0,
+          "release_speed_max_px_s": 1400.0,
+          "instances": 3
+        },
+        "snap": {
+          "kind": "abrupt_ambiguous",
+          "step_px": null,
+          "duration_ms": null,
+          "easing": null,
+          "overshoot": false
+        },
+        "resume": {
+          "delay_after_rest_ms": {
+            "value": 100.0,
+            "confidence": {
+              "value": 0.5,
+              "band": "medium"
+            }
+          },
+          "delay_after_release_ms": {
+            "value": 250.0,
+            "confidence": {
+              "value": 0.45,
+              "band": "low"
+            }
+          },
+          "ramp_ms": {
+            "value": 750.0,
+            "confidence": {
+              "value": 0.7,
+              "band": "medium"
+            }
+          },
+          "easing": {
+            "keyword": "ease-in-out",
+            "cubic_bezier": [
+              0.42,
+              0.0,
+              0.58,
+              1.0
+            ],
+            "nearest_named": "ease-in-out",
+            "family": "ease-in-out",
+            "rmse": 0.03,
+            "flags": []
+          },
+          "to_speed_px_s": 39.0,
+          "direction_preserved": true
+        }
+      },
+      "span_ms": {
+        "start_ms": 0,
+        "end_ms": 9300
+      },
+      "samples": [
+        [
+          0,
+          39.0,
+          0.0,
+          0.95
+        ],
+        [
+          50,
+          39.0,
+          1.95,
+          0.95
+        ],
+        [
+          100,
+          39.0,
+          3.9,
+          0.95
+        ],
+        [
+          150,
+          39.0,
+          5.85,
+          0.95
+        ],
+        [
+          200,
+          39.0,
+          7.8,
+          0.95
+        ],
+        [
+          250,
+          39.0,
+          9.75,
+          0.95
+        ],
+        [
+          300,
+          39.0,
+          11.7,
+          0.95
+        ],
+        [
+          350,
+          39.0,
+          13.65,
+          0.95
+        ],
+        [
+          400,
+          39.0,
+          15.6,
+          0.95
+        ],
+        [
+          450,
+          39.0,
+          17.55,
+          0.95
+        ],
+        [
+          500,
+          39.0,
+          19.5,
+          0.95
+        ],
+        [
+          550,
+          39.0,
+          21.45,
+          0.95
+        ],
+        [
+          600,
+          39.0,
+          23.4,
+          0.95
+        ],
+        [
+          650,
+          39.0,
+          25.35,
+          0.95
+        ],
+        [
+          700,
+          39.0,
+          27.3,
+          0.95
+        ],
+        [
+          750,
+          39.0,
+          29.25,
+          0.95
+        ],
+        [
+          800,
+          39.0,
+          31.2,
+          0.95
+        ],
+        [
+          850,
+          39.0,
+          33.15,
+          0.95
+        ],
+        [
+          900,
+          39.0,
+          35.1,
+          0.95
+        ],
+        [
+          950,
+          39.0,
+          37.05,
+          0.95
+        ],
+        [
+          1000,
+          39.0,
+          39.0,
+          0.95
+        ],
+        [
+          1050,
+          39.0,
+          40.95,
+          0.95
+        ],
+        [
+          1100,
+          39.0,
+          42.9,
+          0.95
+        ],
+        [
+          1150,
+          39.0,
+          44.85,
+          0.95
+        ],
+        [
+          1200,
+          39.0,
+          46.8,
+          0.95
+        ],
+        [
+          1250,
+          39.0,
+          48.75,
+          0.95
+        ],
+        [
+          1300,
+          39.0,
+          50.7,
+          0.95
+        ],
+        [
+          1350,
+          39.0,
+          52.65,
+          0.95
+        ],
+        [
+          1400,
+          39.0,
+          54.6,
+          0.95
+        ],
+        [
+          1450,
+          39.0,
+          56.55,
+          0.95
+        ],
+        [
+          1500,
+          39.0,
+          58.5,
+          0.95
+        ],
+        [
+          1550,
+          36.2,
+          60.38,
+          0.95
+        ],
+        [
+          1600,
+          33.4,
+          62.12,
+          0.95
+        ],
+        [
+          1650,
+          30.6,
+          63.72,
+          0.95
+        ],
+        [
+          1700,
+          27.9,
+          65.19,
+          0.95
+        ],
+        [
+          1750,
+          25.1,
+          66.51,
+          0.95
+        ],
+        [
+          1800,
+          22.3,
+          67.69,
+          0.95
+        ],
+        [
+          1850,
+          19.5,
+          68.74,
+          0.95
+        ],
+        [
+          1900,
+          16.7,
+          69.64,
+          0.95
+        ],
+        [
+          1950,
+          13.9,
+          70.41,
+          0.95
+        ],
+        [
+          2000,
+          11.1,
+          71.04,
+          0.95
+        ],
+        [
+          2050,
+          -492.6,
+          59.0,
+          0.95
+        ],
+        [
+          2100,
+          -996.3,
+          21.78,
+          0.8
+        ],
+        [
+          2150,
+          -1500.0,
+          -40.63,
+          0.6
+        ],
+        [
+          2200,
+          -1485.7,
+          -115.27,
+          0.6
+        ],
+        [
+          2250,
+          -1471.4,
+          -189.2,
+          0.6
+        ],
+        [
+          2300,
+          -1457.1,
+          -262.41,
+          0.6
+        ],
+        [
+          2350,
+          -1442.9,
+          -334.91,
+          0.6
+        ],
+        [
+          2400,
+          -1428.6,
+          -406.7,
+          0.6
+        ],
+        [
+          2450,
+          -1414.3,
+          -477.77,
+          0.6
+        ],
+        [
+          2500,
+          -1400.0,
+          -548.13,
+          0.6
+        ],
+        [
+          2550,
+          -1090.3,
+          -610.06,
+          0.8
+        ],
+        [
+          2600,
+          -849.1,
+          -658.3,
+          0.8
+        ],
+        [
+          2650,
+          -661.3,
+          -695.87,
+          0.8
+        ],
+        [
+          2700,
+          -515.0,
+          -725.12,
+          0.95
+        ],
+        [
+          2750,
+          -401.1,
+          -747.91,
+          0.95
+        ],
+        [
+          2800,
+          -312.4,
+          -765.65,
+          0.95
+        ],
+        [
+          2850,
+          -243.3,
+          -779.47,
+          0.95
+        ],
+        [
+          2900,
+          -189.5,
+          -790.23,
+          0.95
+        ],
+        [
+          2950,
+          -147.6,
+          -798.62,
+          0.95
+        ],
+        [
+          3000,
+          -114.9,
+          -805.14,
+          0.95
+        ],
+        [
+          3050,
+          -89.5,
+          -810.23,
+          0.95
+        ],
+        [
+          3100,
+          -69.7,
+          -814.19,
+          0.95
+        ],
+        [
+          3150,
+          -54.3,
+          -817.27,
+          0.95
+        ],
+        [
+          3200,
+          -42.3,
+          -819.67,
+          0.95
+        ],
+        [
+          3250,
+          -32.9,
+          -821.54,
+          0.95
+        ],
+        [
+          3300,
+          -25.6,
+          -823.0,
+          0.95
+        ],
+        [
+          3350,
+          -20.0,
+          -824.13,
+          0.95
+        ],
+        [
+          3400,
+          -15.6,
+          -825.02,
+          0.95
+        ],
+        [
+          3450,
+          -12.1,
+          -825.71,
+          0.95
+        ],
+        [
+          3500,
+          -9.4,
+          -826.24,
+          0.95
+        ],
+        [
+          3550,
+          -7.3,
+          -826.66,
+          0.95
+        ],
+        [
+          3600,
+          -5.7,
+          -826.98,
+          0.95
+        ],
+        [
+          3650,
+          -4.5,
+          -827.24,
+          0.95
+        ],
+        [
+          3700,
+          -3.5,
+          -827.43,
+          0.95
+        ],
+        [
+          3750,
+          -2.7,
+          -827.59,
+          0.95
+        ],
+        [
+          3800,
+          -214.5,
+          -833.02,
+          0.95
+        ],
+        [
+          3850,
+          -426.4,
+          -849.04,
+          0.95
+        ],
+        [
+          3900,
+          -638.2,
+          -875.65,
+          0.8
+        ],
+        [
+          3950,
+          -850.0,
+          -912.86,
+          0.8
+        ],
+        [
+          4000,
+          -845.2,
+          -955.24,
+          0.8
+        ],
+        [
+          4050,
+          -840.5,
+          -997.38,
+          0.8
+        ],
+        [
+          4100,
+          -835.7,
+          -1039.29,
+          0.8
+        ],
+        [
+          4150,
+          -831.0,
+          -1080.95,
+          0.8
+        ],
+        [
+          4200,
+          -826.2,
+          -1122.38,
+          0.8
+        ],
+        [
+          4250,
+          -821.4,
+          -1163.57,
+          0.8
+        ],
+        [
+          4300,
+          -816.7,
+          -1204.52,
+          0.8
+        ],
+        [
+          4350,
+          -811.9,
+          -1245.24,
+          0.8
+        ],
+        [
+          4400,
+          -807.1,
+          -1285.72,
+          0.8
+        ],
+        [
+          4450,
+          -802.4,
+          -1325.95,
+          0.8
+        ],
+        [
+          4500,
+          -797.6,
+          -1365.95,
+          0.8
+        ],
+        [
+          4550,
+          -792.9,
+          -1405.72,
+          0.8
+        ],
+        [
+          4600,
+          -788.1,
+          -1445.24,
+          0.8
+        ],
+        [
+          4650,
+          -783.3,
+          -1484.52,
+          0.8
+        ],
+        [
+          4700,
+          -778.6,
+          -1523.57,
+          0.8
+        ],
+        [
+          4750,
+          -773.8,
+          -1562.38,
+          0.8
+        ],
+        [
+          4800,
+          -769.0,
+          -1600.95,
+          0.8
+        ],
+        [
+          4850,
+          -764.3,
+          -1639.29,
+          0.8
+        ],
+        [
+          4900,
+          -759.5,
+          -1677.38,
+          0.8
+        ],
+        [
+          4950,
+          -754.8,
+          -1715.24,
+          0.8
+        ],
+        [
+          5000,
+          -750.0,
+          -1752.86,
+          0.8
+        ],
+        [
+          5050,
+          -591.1,
+          -1786.23,
+          0.95
+        ],
+        [
+          5100,
+          -465.9,
+          -1812.53,
+          0.95
+        ],
+        [
+          5150,
+          -367.2,
+          -1833.26,
+          0.95
+        ],
+        [
+          5200,
+          -289.4,
+          -1849.59,
+          0.95
+        ],
+        [
+          5250,
+          -228.1,
+          -1862.47,
+          0.95
+        ],
+        [
+          5300,
+          -179.7,
+          -1872.61,
+          0.95
+        ],
+        [
+          5350,
+          -141.7,
+          -1880.61,
+          0.95
+        ],
+        [
+          5400,
+          -111.6,
+          -1886.91,
+          0.95
+        ],
+        [
+          5450,
+          -88.0,
+          -1891.88,
+          0.95
+        ],
+        [
+          5500,
+          -69.3,
+          -1895.8,
+          0.95
+        ],
+        [
+          5550,
+          63.1,
+          -1895.95,
+          0.95
+        ],
+        [
+          5600,
+          195.5,
+          -1889.49,
+          0.95
+        ],
+        [
+          5650,
+          327.9,
+          -1876.4,
+          0.95
+        ],
+        [
+          5700,
+          460.3,
+          -1856.7,
+          0.95
+        ],
+        [
+          5750,
+          592.7,
+          -1830.37,
+          0.95
+        ],
+        [
+          5800,
+          725.2,
+          -1797.42,
+          0.8
+        ],
+        [
+          5850,
+          857.6,
+          -1757.85,
+          0.8
+        ],
+        [
+          5900,
+          990.0,
+          -1711.66,
+          0.8
+        ],
+        [
+          5950,
+          978.8,
+          -1662.45,
+          0.8
+        ],
+        [
+          6000,
+          967.5,
+          -1613.79,
+          0.8
+        ],
+        [
+          6050,
+          956.2,
+          -1565.7,
+          0.8
+        ],
+        [
+          6100,
+          945.0,
+          -1518.16,
+          0.8
+        ],
+        [
+          6150,
+          933.8,
+          -1471.2,
+          0.8
+        ],
+        [
+          6200,
+          922.5,
+          -1424.79,
+          0.8
+        ],
+        [
+          6250,
+          911.2,
+          -1378.95,
+          0.8
+        ],
+        [
+          6300,
+          900.0,
+          -1333.66,
+          0.8
+        ],
+        [
+          6350,
+          691.8,
+          -1294.1,
+          0.8
+        ],
+        [
+          6400,
+          531.7,
+          -1263.69,
+          0.95
+        ],
+        [
+          6450,
+          408.7,
+          -1240.31,
+          0.95
+        ],
+        [
+          6500,
+          314.1,
+          -1222.35,
+          0.95
+        ],
+        [
+          6550,
+          241.4,
+          -1208.54,
+          0.95
+        ],
+        [
+          6600,
+          185.6,
+          -1197.92,
+          0.95
+        ],
+        [
+          6650,
+          142.6,
+          -1189.77,
+          0.95
+        ],
+        [
+          6700,
+          109.6,
+          -1183.49,
+          0.95
+        ],
+        [
+          6750,
+          84.3,
+          -1178.68,
+          0.95
+        ],
+        [
+          6800,
+          64.8,
+          -1174.97,
+          0.95
+        ],
+        [
+          6850,
+          49.8,
+          -1172.12,
+          0.95
+        ],
+        [
+          6900,
+          38.3,
+          -1169.93,
+          0.95
+        ],
+        [
+          6950,
+          29.4,
+          -1168.25,
+          0.95
+        ],
+        [
+          7000,
+          22.6,
+          -1166.96,
+          0.95
+        ],
+        [
+          7050,
+          -226.3,
+          -1172.05,
+          0.95
+        ],
+        [
+          7100,
+          -475.3,
+          -1189.59,
+          0.95
+        ],
+        [
+          7150,
+          -724.2,
+          -1219.58,
+          0.8
+        ],
+        [
+          7200,
+          -973.2,
+          -1262.02,
+          0.8
+        ],
+        [
+          7250,
+          -1222.1,
+          -1316.9,
+          0.6
+        ],
+        [
+          7300,
+          -1471.1,
+          -1384.23,
+          0.6
+        ],
+        [
+          7350,
+          -1720.0,
+          -1464.0,
+          0.6
+        ],
+        [
+          7400,
+          -1706.0,
+          -1549.65,
+          0.6
+        ],
+        [
+          7450,
+          -1692.0,
+          -1634.6,
+          0.6
+        ],
+        [
+          7500,
+          -1678.0,
+          -1718.85,
+          0.6
+        ],
+        [
+          7550,
+          -1664.0,
+          -1802.4,
+          0.6
+        ],
+        [
+          7600,
+          -1650.0,
+          -1885.25,
+          0.6
+        ],
+        [
+          7650,
+          0.0,
+          -1912.48,
+          0.95
+        ],
+        [
+          7700,
+          0.0,
+          -1912.48,
+          0.95
+        ],
+        [
+          7750,
+          0.0,
+          -1912.48,
+          0.95
+        ],
+        [
+          7800,
+          0.0,
+          -1912.48,
+          0.95
+        ],
+        [
+          7850,
+          0.0,
+          -1912.48,
+          0.95
+        ],
+        [
+          7900,
+          0.3,
+          -1912.47,
+          0.95
+        ],
+        [
+          7950,
+          1.4,
+          -1912.43,
+          0.95
+        ],
+        [
+          8000,
+          3.2,
+          -1912.32,
+          0.95
+        ],
+        [
+          8050,
+          5.7,
+          -1912.1,
+          0.95
+        ],
+        [
+          8100,
+          9.0,
+          -1911.74,
+          0.95
+        ],
+        [
+          8150,
+          12.9,
+          -1911.19,
+          0.95
+        ],
+        [
+          8200,
+          17.3,
+          -1910.43,
+          0.95
+        ],
+        [
+          8250,
+          21.7,
+          -1909.46,
+          0.95
+        ],
+        [
+          8300,
+          26.1,
+          -1908.26,
+          0.95
+        ],
+        [
+          8350,
+          30.0,
+          -1906.86,
+          0.95
+        ],
+        [
+          8400,
+          33.3,
+          -1905.28,
+          0.95
+        ],
+        [
+          8450,
+          35.8,
+          -1903.55,
+          0.95
+        ],
+        [
+          8500,
+          37.6,
+          -1901.71,
+          0.95
+        ],
+        [
+          8550,
+          38.7,
+          -1899.8,
+          0.95
+        ],
+        [
+          8600,
+          39.0,
+          -1897.85,
+          0.95
+        ],
+        [
+          8650,
+          39.0,
+          -1895.9,
+          0.95
+        ],
+        [
+          8700,
+          39.0,
+          -1893.95,
+          0.95
+        ],
+        [
+          8750,
+          39.0,
+          -1892.0,
+          0.95
+        ],
+        [
+          8800,
+          39.0,
+          -1890.05,
+          0.95
+        ],
+        [
+          8850,
+          39.0,
+          -1888.1,
+          0.95
+        ],
+        [
+          8900,
+          39.0,
+          -1886.15,
+          0.95
+        ],
+        [
+          8950,
+          39.0,
+          -1884.2,
+          0.95
+        ],
+        [
+          9000,
+          39.0,
+          -1882.25,
+          0.95
+        ],
+        [
+          9050,
+          39.0,
+          -1880.3,
+          0.95
+        ],
+        [
+          9100,
+          39.0,
+          -1878.35,
+          0.95
+        ],
+        [
+          9150,
+          39.0,
+          -1876.4,
+          0.95
+        ],
+        [
+          9200,
+          39.0,
+          -1874.45,
+          0.95
+        ],
+        [
+          9250,
+          39.0,
+          -1872.5,
+          0.95
+        ],
+        [
+          9300,
+          39.0,
+          -1870.55,
+          0.95
+        ]
+      ]
+    },
+    "cursor": {
+      "visible": false,
+      "confidence": 0.0,
+      "events": []
+    },
+    "structure": [],
+    "interpretation": {
+      "provider": "none",
+      "model": null,
+      "status": "disabled",
+      "duration_ms": null
+    },
+    "warnings": [
+      {
+        "code": "cursor_not_visible",
+        "severity": "warn",
+        "message": "No cursor was visible; what starts and stops the motion is inferred from the motion only."
+      },
+      {
+        "code": "vfr_source",
+        "severity": "info",
+        "message": "The recording has a variable frame rate; frame timestamps were used as recorded."
+      },
+      {
+        "code": "tracking_degraded",
+        "severity": "warn",
+        "message": "About 12% of frames during the fast drags (p3, p9) could not be tracked precisely; their values are less certain."
+      },
+      {
+        "code": "loop_period_not_observed",
+        "severity": "info",
+        "message": "The content never repeated within the recording, so the loop length is not known."
+      }
+    ],
+    "initial_state": {},
+    "active_state": {}
+  },
+  "outputs": {
+    "technical": "CONTINUOUS MOTION\n\nScroller: Scroller (e1) — carousel, horizontal (x axis)\nType: Draggable scroller (carousel) — medium confidence (75%), from heuristic\nTrigger: Autoplaying scroller that is dragged by the pointer; after release it coasts, then autoplay resumes.\nTrigger kind: drag — medium confidence (60%)\nRegion: 760×200 px at x 260, y 300 — medium (70%)\nCard pitch (card + gap): ≈216 px — medium (70%)\nGap between cards: ≈16 px — medium (50%)\nAnalysed span: 0–9300 ms (≈9300 ms)\n\nAUTOPLAY\n\nDirection: right (content moves to the right)\nSpeed: ≈39 px/s, linear — high (90%)\nLoop: not observed (the content did not repeat within the recording)\n\nPHASES\n\n#    Kind                      Time (ms)  Velocity (px/s)  Key value                                             Confidence\np1   autoplay                  0–1500     +39 → +39        constant ≈39 px/s                                     high (90%)\np2   decelerate (interrupted)  1500–2000  +39 → +11        ramp +39 → 0 px/s over ≈700 ms (low), linear          medium (55%)\np3   drag                      2000–2500  +11 → -1400      peak -1500 px/s                                       high (80%)\np4   inertia                   2500–3750  -1400 → -3       τ ≈200 ms, v0 -1400 px/s                              high (80%)\np5   drag                      3750–5000  -3 → -750        peak -850 px/s                                        high (80%)\np6   inertia (interrupted)     5000–5500  -750 → -69       τ ≈210 ms (medium), v0 -750 px/s                      medium (70%)\np7   drag                      5500–6300  -69 → +900       peak +990 px/s                                        high (80%)\np8   inertia (interrupted)     6300–7000  +900 → +23       τ ≈190 ms (medium), v0 +900 px/s                      medium (75%)\np9   drag                      7000–7600  +23 → -1650      peak -1720 px/s                                       high (80%)\np10  stop                      7600–7750  -1650 → 0        —                                                     low (45%)\np11  paused                    7750–7850  0 → 0            —                                                     medium (60%)\np12  resume                    7850–8600  0 → +39          ramp 0 → +39 px/s over ≈750 ms (medium), ease-in-out  medium (70%)\np13  autoplay                  8600–9300  +39 → +39        constant ≈39 px/s                                     high (85%)\n\nPhase notes:\n- p2: cut short by a drag before reaching zero\n- p3: tracking degraded during fast motion\n- p6: re-grabbed before coming to rest\n- p8: re-grabbed before coming to rest\n- p9: tracking degraded during fast motion\n- p10: pointer likely stopped before release, or hard snap (ambiguous without cursor)\n\nBEHAVIOUR\n\nPause: on hover or press (trigger not visible in the recording) — low (35%)\n  Slowdown: possibly ≈700 ms, linear — low (40%)\n  Comes to a full stop: no (cut short by the next interaction in the recording)\nDrag: 4 drags\n  Follows the pointer: unknown (no cursor visible to compare)\n  Peak speed: ≈1720 px/s — medium (75%)\nMomentum (inertia): exponential decay, 3 releases\n  Time constant τ: ≈200 ms — high (80%)\n  Release speeds: ≈750–1400 px/s\nSnap: abrupt stops without grid evidence (a snap, or the pointer stopping before release; ambiguous without a visible cursor)\n  Overshoot: no\nResume:\n  Delay after rest: ≈100 ms — medium (50%)\n  Delay after release: possibly ≈250 ms — low (45%)\n  Ramp: ≈750 ms, ease-in-out — medium (70%)\n  Speed after resuming: ≈39 px/s, same direction\n\nAPPEARANCE\n\nViewport: 1280×800 px (recorded frame)\nPage background: #FAFAFA — high (80%)\nScroller (e1): 760×200 px at x 260, y 300; background #F1F1F4 — medium (70%)\nCard (e2): 200×160 px, vertically centred in the scroller; background #FFFFFF — medium (75%); corner radius possibly ≈12 px — low (45%)\nText (e3): 120×20 px, lower part of the card; text colour #1A1A1A — medium (60%); font size possibly ≈16 px — low (35%)\n\nUNCERTAIN OBSERVATIONS\n\nNone.\n\nNOTES\n\n- Values are visual estimates from a screen recording, not source CSS.\n- Geometry is in CSS px; display scale assumed 1x from the 1280x800 recording.\n- Timing resolution: about 18ms per frame (55.7 fps effective).\n- Signed velocities: positive = content moves right (x) / down (y).\n- Element labels are heuristic (AI labeling status: disabled).\n- No cursor was visible; what starts and stops the motion is inferred from the motion only.\n- The recording has a variable frame rate; frame timestamps were used as recorded.\n- About 12% of frames during the fast drags (p3, p9) could not be tracked precisely; their values are less certain.\n- The content never repeated within the recording, so the loop length is not known.\n",
+    "llm_prompt": "Recreate the reference UI motion, a continuously moving horizontal carousel, as a single self-contained, responsive HTML file, as follows.\n\nSTRUCTURE\n\nCreate a horizontal carousel: a viewport (the scroller) that clips a track holding one row of placeholder cards.\n- The cards sit side by side at a constant spacing: pitch ≈216 px (medium confidence), one card plus the gap to the next.\n- Repeat the cards once (two identical copies back to back) so the track can wrap seamlessly; one copy must be at least as wide as the scroller.\n- Each card contains: text.\n- The motion runs along the horizontal axis only.\n\nAPPEARANCE (measured, approximate)\n\n- Recorded viewport: 1280×800 px; page background #FAFAFA.\n- Scroller: ≈760×200 px (medium confidence), top-left corner at x 260, y 300 of the recorded viewport (horizontally and vertically centred); background #F1F1F4 (medium confidence).\n- Cards: ≈200×160 px each, vertically centred in the scroller; gap ≈16 px (medium confidence); background #FFFFFF (medium confidence); corner radius possibly ≈12 px (low confidence).\n- Card text: colour #1A1A1A (medium confidence); font size possibly ≈16 px (low confidence); placed in the lower part of the card.\nMatch these sizes, colours and positions at the recorded viewport size; all content stays placeholder.\n\nBEHAVIOUR\n\n1. Autoplay: the track moves continuously to the right at ≈39 px/s with constant (linear) velocity and loops seamlessly by wrapping after one copy of the cards (the loop length was not visible in the recording).\n2. Pause: when the pointer hovers or presses the scroller (the trigger was not visible in the recording; implement it as hover with a mouse, and pressing starts a drag anyway), autoplay slows to a stop over possibly ≈700 ms using a linear curve (low confidence); in the recording the slowdown was cut short by the next interaction, so its full length is extrapolated. It stays paused while the pointer stays over it.\n3. Dragging: the content follows the pointer exactly along the horizontal axis (assumed: the pointer was not visible in the recording to compare); grabbing the track takes over from autoplay immediately. Use Pointer Events with setPointerCapture on the scroller; set touch-action: pan-y on the scroller so vertical page scrolling still works on touch; prevent text and image selection while dragging, and suppress the click on a card when the pointer moved. Drags in the recording reached ≈1720 px/s (medium confidence; 4 drags recorded).\n4. Release (momentum): on release, keep moving with the pointer's release velocity and let it decay exponentially towards zero with τ ≈200 ms: v = v · e^(−dt/τ) each frame, using the real frame time so it is frame-rate independent, until it comes to rest. Measured release speeds were ≈750–1400 px/s; compute the release velocity from the most recent pointer movement (about the last half of τ), do not hardcode it. Pressing again while it is still coasting stops it at once and starts a new drag.\n5. Abrupt stops: some drags ended abruptly without coasting, and no alignment to the cards was found. This may be a snap or the pointer stopping before release (they look the same without a visible cursor); do not add snapping unless intended.\n6. Resume: once the motion has come to rest and the pointer has left, wait ≈100 ms (medium confidence; possibly ≈250 ms after release, low confidence), then autoplay resumes in its original direction, ramping up from standstill to ≈39 px/s over ≈750 ms using an ease-in-out curve (medium confidence).\n\nOUTPUT\n\nBuild this as one self-contained, responsive HTML file named index.html: the markup, one <style> block and one inline <script> (the motion needs it). No frameworks, CDNs, external fonts, external images or build step; the file must work when opened directly in a browser.\n\n- Content: build only the structure above, with neutral placeholders instead of real images or copy: images as a solid or gradient block with a fixed aspect-ratio, text as short role-named or lorem-style text (for example \"Title\", \"Description\"), icons as a simple inline SVG. Do not add UI beyond what is needed to demonstrate the motion.\n- Layout: mobile-first and fluid, working from 320px wide phones to wide desktops, with the standard responsive <meta name=\"viewport\"> tag. At the recorded viewport size keep the measured sizes, colours and the scroller's position from APPEARANCE (place its top-left corner exactly there, e.g. with the page's padding or margins; do not centre it unless APPEARANCE says it is centred); below that width the scroller may span the full width while the cards keep their measured size. Keep every motion value above as specified in CSS px, px/s and ms: they are measured design values, so do not scale them with the viewport.\n- Motion: drive the track from one requestAnimationFrame loop that owns a single position value (autoplay, dragging, and momentum all change that one value). Advance it with the real frame time (dt) so speeds do not depend on the frame rate, apply it with the translate property, and wrap it modulo the size of one copy of the cards so the track never runs out of content. Velocity ramps (slowdown and resume) interpolate the velocity with the easing curves given above.\n- Pointer: pointerdown / pointermove / pointerup / pointercancel with setPointerCapture; touch-action: pan-y on the scroller; user-select: none, and draggable=\"false\" on placeholder images; cursor: grab, and grabbing while dragging.\n- Hover: react to pointerenter / pointerleave from mouse pointers only (pointerType \"mouse\"), so a touch does not leave the scroller paused.\n- Focus and visibility: make the scroller keyboard-focusable with an aria-label and pause autoplay only while it has keyboard focus (:focus-visible), not after a pointer press or drag; pause while the tab is hidden (visibilitychange) and reset the frame clock when it becomes visible so the track does not jump.\n- Reduced motion: under prefers-reduced-motion: reduce, do not autoplay at all (the track starts and stays still); dragging and the release momentum still work because the user drives them.\n- Semantics: use semantic elements (a section with an aria-label for the scroller, a list or articles for the cards, headings, p) and mark decorative placeholders with aria-hidden=\"true\".\n\nCONSTRAINTS\n\nAll numbers are estimates measured from a screen recording (display scale assumed 1x); keep them as targets, not exact source values.\nThe pointer was not visible in the recording; what starts and stops the motion is inferred from the motion alone.\nFast drags could not be tracked precisely; treat peak and release speeds as rough.\nDo not invent additional motion or behaviours that are not described above.\n",
+    "css": "/* Suggested implementation — estimated from a screen recording, not the original CSS. */\n/* All values are approximate; display scale assumed 1x. */\n/* Markup: .scroller > .scroller__track > the cards repeated twice (two identical copies) for a seamless loop. */\n/* Autoplay, dragging, and momentum need the JS driver (JS tab); these rules are layout only. */\n\nbody {\n  background-color: #FAFAFA; /* estimated, high confidence */\n}\n\n.scroller {\n  display: flex;\n  align-items: center;\n  max-width: 760px; /* estimated, medium confidence */\n  height: 200px; /* estimated, medium confidence */\n  margin-inline: auto;\n  overflow: hidden;\n  touch-action: pan-y; /* page scroll stays on the other axis */\n  user-select: none;\n  cursor: grab;\n  background-color: #F1F1F4; /* estimated, medium confidence */\n}\n\n.scroller:active {\n  cursor: grabbing;\n}\n\n.scroller__track {\n  display: flex;\n  flex: none;\n  gap: 16px; /* estimated, medium confidence */\n  width: max-content;\n  will-change: translate;\n}\n\n.scroller__card {\n  flex: none;\n  width: 200px;\n  height: 160px;\n  background-color: #FFFFFF; /* estimated, medium confidence */\n  border-radius: 12px; /* estimated, low confidence */\n}\n\n.scroller__text {\n  color: #1A1A1A; /* estimated, medium confidence */\n  font-size: 16px; /* estimated, low confidence */\n}\n",
+    "json": "{\n  \"schema_version\": \"0.2\",\n  \"job_id\": \"7c41e2a95b0d4f3e8a6c1b2d3e4f5a6b\",\n  \"meta\": {\n    \"generated_at\": \"2026-10-03T10:00:00Z\",\n    \"pipeline_version\": \"0.1.0\",\n    \"estimated\": true,\n    \"disclaimer\": \"Values are visual estimates from a screen recording, not source CSS.\"\n  },\n  \"mode\": \"continuous\",\n  \"source\": {\n    \"filename\": \"carousel-drag.mov\",\n    \"container\": \"mov\",\n    \"codec\": \"h264\",\n    \"width\": 1280,\n    \"height\": 800,\n    \"duration_ms\": 9300,\n    \"fps_nominal\": 60.0,\n    \"fps_effective\": 55.7,\n    \"is_vfr\": true,\n    \"pixel_ratio\": 1,\n    \"pixel_ratio_source\": \"auto\",\n    \"timing_resolution_ms\": 18\n  },\n  \"scene\": {\n    \"viewport_css\": {\n      \"w\": 1280.0,\n      \"h\": 800.0\n    },\n    \"page_background\": {\n      \"value\": \"#FAFAFA\",\n      \"confidence\": {\n        \"value\": 0.8,\n        \"band\": \"high\"\n      }\n    }\n  },\n  \"interaction\": {\n    \"type\": \"drag\",\n    \"type_source\": \"heuristic\",\n    \"type_confidence\": {\n      \"value\": 0.75,\n      \"band\": \"medium\"\n    },\n    \"pattern\": \"carousel\",\n    \"target_element_id\": \"e1\",\n    \"target_label\": \"Scroller (e1)\",\n    \"target_description\": null,\n    \"trigger\": {\n      \"kind\": \"drag\",\n      \"reverse_kind\": \"none\",\n      \"description\": \"Autoplaying scroller that is dragged by the pointer; after release it coasts, then autoplay resumes.\",\n      \"confidence\": {\n        \"value\": 0.6,\n        \"band\": \"medium\"\n      }\n    },\n    \"direction\": \"continuous\",\n    \"total_duration_ms\": {\n      \"forward\": 9300,\n      \"reverse\": null\n    }\n  },\n  \"elements\": [\n    {\n      \"id\": \"e1\",\n      \"label\": \"Scroller (e1)\",\n      \"label_source\": \"heuristic\",\n      \"role\": \"scroller\",\n      \"parent_id\": null,\n      \"kind\": \"scroller\",\n      \"bbox_initial\": {\n        \"x\": 260.0,\n        \"y\": 300.0,\n        \"w\": 760.0,\n        \"h\": 200.0\n      },\n      \"bbox_active\": {\n        \"x\": 260.0,\n        \"y\": 300.0,\n        \"w\": 760.0,\n        \"h\": 200.0\n      },\n      \"text_like\": false,\n      \"static\": {\n        \"border_radius_px\": null,\n        \"shadow\": null,\n        \"background_color\": {\n          \"value\": \"#F1F1F4\",\n          \"confidence\": {\n            \"value\": 0.7,\n            \"band\": \"medium\"\n          }\n        }\n      }\n    },\n    {\n      \"id\": \"e2\",\n      \"label\": \"Card (e2)\",\n      \"label_source\": \"heuristic\",\n      \"role\": \"card\",\n      \"parent_id\": \"e1\",\n      \"kind\": \"transform\",\n      \"bbox_initial\": {\n        \"x\": 268.0,\n        \"y\": 320.0,\n        \"w\": 200.0,\n        \"h\": 160.0\n      },\n      \"bbox_active\": {\n        \"x\": 268.0,\n        \"y\": 320.0,\n        \"w\": 200.0,\n        \"h\": 160.0\n      },\n      \"text_like\": false,\n      \"static\": {\n        \"border_radius_px\": {\n          \"value\": 12.0,\n          \"confidence\": {\n            \"value\": 0.45,\n            \"band\": \"low\"\n          }\n        },\n        \"shadow\": null,\n        \"background_color\": {\n          \"value\": \"#FFFFFF\",\n          \"confidence\": {\n            \"value\": 0.75,\n            \"band\": \"medium\"\n          }\n        }\n      }\n    },\n    {\n      \"id\": \"e3\",\n      \"label\": \"Text (e3)\",\n      \"label_source\": \"heuristic\",\n      \"role\": \"title\",\n      \"parent_id\": \"e2\",\n      \"kind\": \"transform\",\n      \"bbox_initial\": {\n        \"x\": 284.0,\n        \"y\": 440.0,\n        \"w\": 120.0,\n        \"h\": 20.0\n      },\n      \"bbox_active\": {\n        \"x\": 284.0,\n        \"y\": 440.0,\n        \"w\": 120.0,\n        \"h\": 20.0\n      },\n      \"text_like\": true,\n      \"static\": {\n        \"border_radius_px\": null,\n        \"shadow\": null,\n        \"text_color\": {\n          \"value\": \"#1A1A1A\",\n          \"confidence\": {\n            \"value\": 0.6,\n            \"band\": \"medium\"\n          }\n        },\n        \"font_size_px\": {\n          \"value\": 16.0,\n          \"confidence\": {\n            \"value\": 0.35,\n            \"band\": \"low\"\n          }\n        }\n      }\n    }\n  ],\n  \"segments\": [],\n  \"transitions\": [],\n  \"relationships\": [],\n  \"continuous\": {\n    \"element_id\": \"e1\",\n    \"axis\": \"x\",\n    \"region\": {\n      \"x\": 260.0,\n      \"y\": 300.0,\n      \"w\": 760.0,\n      \"h\": 200.0\n    },\n    \"region_confidence\": {\n      \"value\": 0.7,\n      \"band\": \"medium\"\n    },\n    \"sign_convention\": \"positive = content moves right (x) / down (y)\",\n    \"autoplay\": {\n      \"direction\": \"right\",\n      \"speed_px_s\": {\n        \"value\": 39.0,\n        \"confidence\": {\n          \"value\": 0.9,\n          \"band\": \"high\"\n        }\n      },\n      \"velocity_px_s\": 39.0,\n      \"easing\": \"linear\",\n      \"loop\": {\n        \"observed\": false,\n        \"period_px\": null,\n        \"duration_ms\": null\n      }\n    },\n    \"pitch_px\": {\n      \"value\": 216.0,\n      \"confidence\": {\n        \"value\": 0.7,\n        \"band\": \"medium\"\n      }\n    },\n    \"gap_px\": {\n      \"value\": 16.0,\n      \"confidence\": {\n        \"value\": 0.5,\n        \"band\": \"medium\"\n      }\n    },\n    \"phases\": [\n      {\n        \"id\": \"p1\",\n        \"kind\": \"autoplay\",\n        \"start_ms\": 0,\n        \"end_ms\": 1500,\n        \"v_start_px_s\": 39.0,\n        \"v_end_px_s\": 39.0,\n        \"v_peak_px_s\": 39.0,\n        \"displacement_px\": 58.5,\n        \"fit\": {\n          \"model\": \"constant\",\n          \"velocity_px_s\": {\n            \"value\": 39.0,\n            \"confidence\": {\n              \"value\": 0.9,\n              \"band\": \"high\"\n            }\n          }\n        },\n        \"interrupted\": false,\n        \"evidence\": \"velocity\",\n        \"confidence\": {\n          \"value\": 0.9,\n          \"band\": \"high\"\n        },\n        \"notes\": []\n      },\n      {\n        \"id\": \"p2\",\n        \"kind\": \"decelerate\",\n        \"start_ms\": 1500,\n        \"end_ms\": 2000,\n        \"v_start_px_s\": 39.0,\n        \"v_end_px_s\": 11.1,\n        \"v_peak_px_s\": 39.0,\n        \"displacement_px\": 12.5,\n        \"fit\": {\n          \"model\": \"ramp\",\n          \"from_px_s\": 39.0,\n          \"to_px_s\": 0.0,\n          \"duration_ms\": {\n            \"value\": 700.0,\n            \"confidence\": {\n              \"value\": 0.4,\n              \"band\": \"low\"\n            }\n          },\n          \"easing\": {\n            \"keyword\": \"linear\",\n            \"cubic_bezier\": [\n              0.0,\n              0.0,\n              1.0,\n              1.0\n            ],\n            \"nearest_named\": \"linear\",\n            \"family\": \"linear\",\n            \"rmse\": 0.05,\n            \"flags\": []\n          }\n        },\n        \"interrupted\": true,\n        \"evidence\": \"velocity\",\n        \"confidence\": {\n          \"value\": 0.55,\n          \"band\": \"medium\"\n        },\n        \"notes\": [\n          \"cut short by a drag before reaching zero\"\n        ]\n      },\n      {\n        \"id\": \"p3\",\n        \"kind\": \"drag\",\n        \"start_ms\": 2000,\n        \"end_ms\": 2500,\n        \"v_start_px_s\": 11.1,\n        \"v_end_px_s\": -1400.0,\n        \"v_peak_px_s\": -1500.0,\n        \"displacement_px\": -619.2,\n        \"fit\": null,\n        \"interrupted\": false,\n        \"evidence\": \"velocity\",\n        \"confidence\": {\n          \"value\": 0.8,\n          \"band\": \"high\"\n        },\n        \"notes\": [\n          \"tracking degraded during fast motion\"\n        ]\n      },\n      {\n        \"id\": \"p4\",\n        \"kind\": \"inertia\",\n        \"start_ms\": 2500,\n        \"end_ms\": 3750,\n        \"v_start_px_s\": -1400.0,\n        \"v_end_px_s\": -2.7,\n        \"v_peak_px_s\": -1400.0,\n        \"displacement_px\": -279.5,\n        \"fit\": {\n          \"model\": \"exponential\",\n          \"tau_ms\": {\n            \"value\": 200.0,\n            \"confidence\": {\n              \"value\": 0.82,\n              \"band\": \"high\"\n            }\n          },\n          \"v0_px_s\": {\n            \"value\": -1400.0,\n            \"confidence\": {\n              \"value\": 0.7,\n              \"band\": \"medium\"\n            }\n          },\n          \"v_inf_px_s\": 0.0\n        },\n        \"interrupted\": false,\n        \"evidence\": \"velocity\",\n        \"confidence\": {\n          \"value\": 0.8,\n          \"band\": \"high\"\n        },\n        \"notes\": []\n      },\n      {\n        \"id\": \"p5\",\n        \"kind\": \"drag\",\n        \"start_ms\": 3750,\n        \"end_ms\": 5000,\n        \"v_start_px_s\": -2.7,\n        \"v_end_px_s\": -750.0,\n        \"v_peak_px_s\": -850.0,\n        \"displacement_px\": -925.3,\n        \"fit\": null,\n        \"interrupted\": false,\n        \"evidence\": \"velocity\",\n        \"confidence\": {\n          \"value\": 0.8,\n          \"band\": \"high\"\n        },\n        \"notes\": []\n      },\n      {\n        \"id\": \"p6\",\n        \"kind\": \"inertia\",\n        \"start_ms\": 5000,\n        \"end_ms\": 5500,\n        \"v_start_px_s\": -750.0,\n        \"v_end_px_s\": -69.3,\n        \"v_peak_px_s\": -750.0,\n        \"displacement_px\": -142.9,\n        \"fit\": {\n          \"model\": \"exponential\",\n          \"tau_ms\": {\n            \"value\": 210.0,\n            \"confidence\": {\n              \"value\": 0.6,\n              \"band\": \"medium\"\n            }\n          },\n          \"v0_px_s\": {\n            \"value\": -750.0,\n            \"confidence\": {\n              \"value\": 0.65,\n              \"band\": \"medium\"\n            }\n          },\n          \"v_inf_px_s\": 0.0\n        },\n        \"interrupted\": true,\n        \"evidence\": \"velocity\",\n        \"confidence\": {\n          \"value\": 0.7,\n          \"band\": \"medium\"\n        },\n        \"notes\": [\n          \"re-grabbed before coming to rest\"\n        ]\n      },\n      {\n        \"id\": \"p7\",\n        \"kind\": \"drag\",\n        \"start_ms\": 5500,\n        \"end_ms\": 6300,\n        \"v_start_px_s\": -69.3,\n        \"v_end_px_s\": 900.0,\n        \"v_peak_px_s\": 990.0,\n        \"displacement_px\": 562.1,\n        \"fit\": null,\n        \"interrupted\": false,\n        \"evidence\": \"velocity\",\n        \"confidence\": {\n          \"value\": 0.8,\n          \"band\": \"high\"\n        },\n        \"notes\": []\n      },\n      {\n        \"id\": \"p8\",\n        \"kind\": \"inertia\",\n        \"start_ms\": 6300,\n        \"end_ms\": 7000,\n        \"v_start_px_s\": 900.0,\n        \"v_end_px_s\": 22.6,\n        \"v_peak_px_s\": 900.0,\n        \"displacement_px\": 166.7,\n        \"fit\": {\n          \"model\": \"exponential\",\n          \"tau_ms\": {\n            \"value\": 190.0,\n            \"confidence\": {\n              \"value\": 0.7,\n              \"band\": \"medium\"\n            }\n          },\n          \"v0_px_s\": {\n            \"value\": 900.0,\n            \"confidence\": {\n              \"value\": 0.68,\n              \"band\": \"medium\"\n            }\n          },\n          \"v_inf_px_s\": 0.0\n        },\n        \"interrupted\": true,\n        \"evidence\": \"velocity\",\n        \"confidence\": {\n          \"value\": 0.75,\n          \"band\": \"medium\"\n        },\n        \"notes\": [\n          \"re-grabbed before coming to rest\"\n        ]\n      },\n      {\n        \"id\": \"p9\",\n        \"kind\": \"drag\",\n        \"start_ms\": 7000,\n        \"end_ms\": 7600,\n        \"v_start_px_s\": 22.6,\n        \"v_end_px_s\": -1650.0,\n        \"v_peak_px_s\": -1719.7,\n        \"displacement_px\": -718.3,\n        \"fit\": null,\n        \"interrupted\": false,\n        \"evidence\": \"velocity\",\n        \"confidence\": {\n          \"value\": 0.8,\n          \"band\": \"high\"\n        },\n        \"notes\": [\n          \"tracking degraded during fast motion\"\n        ]\n      },\n      {\n        \"id\": \"p10\",\n        \"kind\": \"stop\",\n        \"start_ms\": 7600,\n        \"end_ms\": 7750,\n        \"v_start_px_s\": -1650.0,\n        \"v_end_px_s\": 0.0,\n        \"v_peak_px_s\": -1650.0,\n        \"displacement_px\": -27.2,\n        \"fit\": null,\n        \"interrupted\": false,\n        \"evidence\": \"velocity\",\n        \"confidence\": {\n          \"value\": 0.45,\n          \"band\": \"low\"\n        },\n        \"notes\": [\n          \"pointer likely stopped before release, or hard snap (ambiguous without cursor)\"\n        ]\n      },\n      {\n        \"id\": \"p11\",\n        \"kind\": \"paused\",\n        \"start_ms\": 7750,\n        \"end_ms\": 7850,\n        \"v_start_px_s\": 0.0,\n        \"v_end_px_s\": 0.0,\n        \"v_peak_px_s\": 0.0,\n        \"displacement_px\": 0.0,\n        \"fit\": null,\n        \"interrupted\": false,\n        \"evidence\": \"velocity\",\n        \"confidence\": {\n          \"value\": 0.6,\n          \"band\": \"medium\"\n        },\n        \"notes\": []\n      },\n      {\n        \"id\": \"p12\",\n        \"kind\": \"resume\",\n        \"start_ms\": 7850,\n        \"end_ms\": 8600,\n        \"v_start_px_s\": 0.0,\n        \"v_end_px_s\": 39.0,\n        \"v_peak_px_s\": 39.0,\n        \"displacement_px\": 14.6,\n        \"fit\": {\n          \"model\": \"ramp\",\n          \"from_px_s\": 0.0,\n          \"to_px_s\": 39.0,\n          \"duration_ms\": {\n            \"value\": 750.0,\n            \"confidence\": {\n              \"value\": 0.7,\n              \"band\": \"medium\"\n            }\n          },\n          \"easing\": {\n            \"keyword\": \"ease-in-out\",\n            \"cubic_bezier\": [\n              0.42,\n              0.0,\n              0.58,\n              1.0\n            ],\n            \"nearest_named\": \"ease-in-out\",\n            \"family\": \"ease-in-out\",\n            \"rmse\": 0.03,\n            \"flags\": []\n          }\n        },\n        \"interrupted\": false,\n        \"evidence\": \"velocity\",\n        \"confidence\": {\n          \"value\": 0.7,\n          \"band\": \"medium\"\n        },\n        \"notes\": []\n      },\n      {\n        \"id\": \"p13\",\n        \"kind\": \"autoplay\",\n        \"start_ms\": 8600,\n        \"end_ms\": 9300,\n        \"v_start_px_s\": 39.0,\n        \"v_end_px_s\": 39.0,\n        \"v_peak_px_s\": 39.0,\n        \"displacement_px\": 27.3,\n        \"fit\": {\n          \"model\": \"constant\",\n          \"velocity_px_s\": {\n            \"value\": 39.0,\n            \"confidence\": {\n              \"value\": 0.85,\n              \"band\": \"high\"\n            }\n          }\n        },\n        \"interrupted\": false,\n        \"evidence\": \"velocity\",\n        \"confidence\": {\n          \"value\": 0.85,\n          \"band\": \"high\"\n        },\n        \"notes\": []\n      }\n    ],\n    \"behavior\": {\n      \"pause\": {\n        \"on\": \"unknown\",\n        \"on_confidence\": {\n          \"value\": 0.35,\n          \"band\": \"low\"\n        },\n        \"decel_ms\": {\n          \"value\": 700.0,\n          \"confidence\": {\n            \"value\": 0.4,\n            \"band\": \"low\"\n          }\n        },\n        \"easing\": {\n          \"keyword\": \"linear\",\n          \"cubic_bezier\": [\n            0.0,\n            0.0,\n            1.0,\n            1.0\n          ],\n          \"nearest_named\": \"linear\",\n          \"family\": \"linear\",\n          \"rmse\": 0.05,\n          \"flags\": []\n        },\n        \"stops_completely\": false\n      },\n      \"drag\": {\n        \"count\": 4,\n        \"follows_pointer\": null,\n        \"pointer_ratio\": null,\n        \"peak_speed_px_s\": {\n          \"value\": 1720.0,\n          \"confidence\": {\n            \"value\": 0.75,\n            \"band\": \"medium\"\n          }\n        }\n      },\n      \"inertia\": {\n        \"model\": \"exponential\",\n        \"tau_ms\": {\n          \"value\": 200.0,\n          \"confidence\": {\n            \"value\": 0.8,\n            \"band\": \"high\"\n          }\n        },\n        \"duration_ms\": null,\n        \"easing\": null,\n        \"release_speed_min_px_s\": 750.0,\n        \"release_speed_max_px_s\": 1400.0,\n        \"instances\": 3\n      },\n      \"snap\": {\n        \"kind\": \"abrupt_ambiguous\",\n        \"step_px\": null,\n        \"duration_ms\": null,\n        \"easing\": null,\n        \"overshoot\": false\n      },\n      \"resume\": {\n        \"delay_after_rest_ms\": {\n          \"value\": 100.0,\n          \"confidence\": {\n            \"value\": 0.5,\n            \"band\": \"medium\"\n          }\n        },\n        \"delay_after_release_ms\": {\n          \"value\": 250.0,\n          \"confidence\": {\n            \"value\": 0.45,\n            \"band\": \"low\"\n          }\n        },\n        \"ramp_ms\": {\n          \"value\": 750.0,\n          \"confidence\": {\n            \"value\": 0.7,\n            \"band\": \"medium\"\n          }\n        },\n        \"easing\": {\n          \"keyword\": \"ease-in-out\",\n          \"cubic_bezier\": [\n            0.42,\n            0.0,\n            0.58,\n            1.0\n          ],\n          \"nearest_named\": \"ease-in-out\",\n          \"family\": \"ease-in-out\",\n          \"rmse\": 0.03,\n          \"flags\": []\n        },\n        \"to_speed_px_s\": 39.0,\n        \"direction_preserved\": true\n      }\n    },\n    \"span_ms\": {\n      \"start_ms\": 0,\n      \"end_ms\": 9300\n    }\n  },\n  \"cursor\": {\n    \"visible\": false,\n    \"confidence\": 0.0,\n    \"events\": []\n  },\n  \"structure\": [],\n  \"interpretation\": {\n    \"provider\": \"none\",\n    \"model\": null,\n    \"status\": \"disabled\",\n    \"duration_ms\": null\n  },\n  \"warnings\": [\n    {\n      \"code\": \"cursor_not_visible\",\n      \"severity\": \"warn\",\n      \"message\": \"No cursor was visible; what starts and stops the motion is inferred from the motion only.\"\n    },\n    {\n      \"code\": \"vfr_source\",\n      \"severity\": \"info\",\n      \"message\": \"The recording has a variable frame rate; frame timestamps were used as recorded.\"\n    },\n    {\n      \"code\": \"tracking_degraded\",\n      \"severity\": \"warn\",\n      \"message\": \"About 12% of frames during the fast drags (p3, p9) could not be tracked precisely; their values are less certain.\"\n    },\n    {\n      \"code\": \"loop_period_not_observed\",\n      \"severity\": \"info\",\n      \"message\": \"The content never repeated within the recording, so the loop length is not known.\"\n    }\n  ],\n  \"initial_state\": {},\n  \"active_state\": {}\n}\n",
+    "js": "// Suggested driver — estimated from a screen recording, not the original code.\n// All values are approximate (display scale assumed 1x).\n// Markup: .scroller > .scroller__track holding the cards twice (two identical copies back to back).\n// Signed velocities: positive = content moves right (x) / down (y).\n// Abrupt stops were seen but not aligned to the cards (snap or the pointer stopping before release); no snapping is implemented.\n// Pause trigger not visible in the recording: implemented as hover.\n\nconst AUTOPLAY_PX_S = 39; // linear autoplay to the right, high confidence\nconst PAUSE_DECEL_MS = 700; // slowdown to a stop on hover (trigger not visible), low confidence\nconst PAUSE_EASE = [0, 0, 1, 1]; // linear\nconst INERTIA_TAU_MS = 200; // momentum decay time constant, high confidence\nconst RESUME_DELAY_MS = 100; // after the motion comes to rest, medium confidence\nconst RESUME_RAMP_MS = 750; // ramp back to autoplay speed, medium confidence\nconst RESUME_EASE = [0.42, 0, 0.58, 1]; // ease-in-out\nconst RESUME_PX_S = 39; // autoplay velocity after resuming, same direction\n\nconst scroller = document.querySelector('.scroller');\nconst track = scroller.querySelector('.scroller__track');\nconst reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');\n\nlet x = 0; // track offset in px, unwrapped (wrapped only when rendering)\nlet v = 0; // velocity in px/s\nlet autoV = AUTOPLAY_PX_S; // current autoplay velocity\nlet state = 'autoplay'; // autoplay | decel | paused | drag | inertia | snap | waiting | resume\nlet last = performance.now();\nlet ramp = null; // velocity ramp or position tween: { from, to, ms, curve, start }\nlet restAt = 0;\nlet pressed = false;\nlet hovered = false;\nlet dragged = false;\nlet startP = 0;\nlet lastP = 0;\nconst recent = []; // [time, pointer position] pairs for the release velocity\n\nconst lerp = (a, b, t) => a + (b - a) * t;\nconst bez = (p1, p2, t) =>\n  lerp(lerp(lerp(0, p1, t), lerp(p1, p2, t), t), lerp(lerp(p1, p2, t), lerp(p2, 1, t), t), t);\n// cubic-bezier easing: find the curve parameter for progress p by bisection\nfunction ease([x1, y1, x2, y2], p) {\n  let lo = 0;\n  let hi = 1;\n  while (hi - lo > 1 / 1000) {\n    const mid = (lo + hi) / 2;\n    if (bez(x1, x2, mid) < p) lo = mid;\n    else hi = mid;\n  }\n  return bez(y1, y2, (lo + hi) / 2);\n}\nconst progress = (now) => Math.min(Math.max((now - ramp.start) / Math.max(ramp.ms, 1), 0), 1);\nconst canAutoplay = () => !reducedMotion.matches && !scroller.matches(':focus-visible');\n// one copy = first card of copy A -> first card of copy B, gap between the copies\n// included (both move with the track, so its translate cancels out)\nconst copySize = () => {\n  const kids = track.children;\n  const b = kids[Math.floor(kids.length / 2)];\n  return kids.length > 1\n    ? b.getBoundingClientRect().left - kids[0].getBoundingClientRect().left\n    : 0;\n};\nconst pointer = (e) => e.clientX;\n\nfunction start(kind, from, to, ms, curve) {\n  state = kind;\n  ramp = { from, to, ms, curve, start: performance.now() };\n}\n\nfunction rest() {\n  v = 0;\n  restAt = performance.now();\n  state = pressed || hovered ? 'paused' : 'waiting';\n}\n\nfunction letGo() {\n  if (state === 'decel' && canAutoplay()) start('resume', v, RESUME_PX_S, RESUME_RAMP_MS, RESUME_EASE);\n  else if (state === 'decel' || state === 'paused') rest();\n}\n\nfunction frame(now) {\n  const dt = (now - last) / 1000;\n  last = now;\n  if (state === 'autoplay') {\n    v = canAutoplay() ? autoV : 0;\n  } else if (state === 'decel') {\n    const p = progress(now);\n    v = lerp(ramp.from, ramp.to, ease(ramp.curve, p));\n    if (p === 1) {\n      v = 0;\n      state = 'paused';\n    }\n  } else if (state === 'resume') {\n    const p = progress(now);\n    v = canAutoplay() ? lerp(ramp.from, ramp.to, ease(ramp.curve, p)) : 0;\n    if (p === 1) {\n      autoV = ramp.to;\n      state = 'autoplay';\n    }\n  } else if (state === 'inertia') {\n    v *= Math.exp((-dt * 1000) / INERTIA_TAU_MS); // frame-rate independent decay\n    const left = (v * INERTIA_TAU_MS) / 1000; // distance still to travel\n    if (Math.abs(left) < 1) rest();\n  } else if (state === 'waiting') {\n    if (now - restAt >= RESUME_DELAY_MS && canAutoplay()) {\n      start('resume', 0, RESUME_PX_S, RESUME_RAMP_MS, RESUME_EASE);\n    }\n  }\n  x += v * dt; // v is zero while dragging, snapping, gliding or paused\n  const size = copySize();\n  if (size > 0) track.style.translate = `${((x % size) - size) % size}px 0`; // wrap into one copy\n  requestAnimationFrame(frame);\n}\n\nscroller.addEventListener('pointerdown', (e) => {\n  if (e.button !== 0) return;\n  scroller.setPointerCapture(e.pointerId);\n  pressed = true;\n  dragged = false;\n  startP = pointer(e);\n  lastP = startP;\n  recent.length = 0;\n  recent.push([e.timeStamp, lastP]);\n  state = 'drag'; // pressing takes over from autoplay and momentum\n  v = 0;\n});\n\nscroller.addEventListener('pointermove', (e) => {\n  if (!pressed) return;\n  const p = pointer(e);\n  x += p - lastP;\n  lastP = p;\n  dragged = dragged || Math.abs(p - startP) > 2;\n  recent.push([e.timeStamp, p]);\n  while (recent.length > 2 && e.timeStamp - recent[0][0] > INERTIA_TAU_MS) recent.shift();\n});\n\nfunction release(e) {\n  if (!pressed) return;\n  pressed = false;\n  if (state === 'drag') {\n    // release velocity from the most recent pointer movement only\n    const fresh = recent.filter(([t]) => e.timeStamp - t <= INERTIA_TAU_MS / 2);\n    const [t0, p0] = fresh[0] || [e.timeStamp, lastP];\n    const span = e.timeStamp - t0;\n    const vRelease = span > 0 ? ((lastP - p0) / span) * 1000 : 0;\n    v = vRelease;\n    state = 'inertia';\n    return;\n  }\n  letGo();\n}\n\nscroller.addEventListener('pointerup', release);\nscroller.addEventListener('pointercancel', release);\nscroller.addEventListener(\n  'click',\n  (e) => {\n    if (!dragged) return;\n    e.preventDefault(); // a drag is not a click on a card\n    e.stopPropagation();\n  },\n  true,\n);\nscroller.addEventListener('dragstart', (e) => e.preventDefault());\n\nscroller.addEventListener('pointerenter', (e) => {\n  if (e.pointerType !== 'mouse') return; // touch has no hover\n  hovered = true;\n  if (state === 'autoplay' || state === 'resume') {\n    start('decel', v, 0, PAUSE_DECEL_MS, PAUSE_EASE);\n  }\n});\nscroller.addEventListener('pointerleave', (e) => {\n  if (e.pointerType !== 'mouse') return;\n  hovered = false;\n  if (!pressed) letGo();\n});\n\n// requestAnimationFrame stops while the tab is hidden: restart the clock so nothing jumps\ndocument.addEventListener('visibilitychange', () => {\n  last = performance.now();\n});\nrequestAnimationFrame(frame);\n"
+  },
+  "artifacts": {
+    "video_url": "/api/jobs/7c41e2a95b0d4f3e8a6c1b2d3e4f5a6b/video",
+    "keyframes": [
+      {
+        "name": "phase_1.png",
+        "kind": "phase",
+        "t_ms": 750,
+        "element_id": null,
+        "url": "/api/jobs/7c41e2a95b0d4f3e8a6c1b2d3e4f5a6b/keyframes/phase_1.png"
+      },
+      {
+        "name": "phase_2.png",
+        "kind": "phase",
+        "t_ms": 2250,
+        "element_id": null,
+        "url": "/api/jobs/7c41e2a95b0d4f3e8a6c1b2d3e4f5a6b/keyframes/phase_2.png"
+      },
+      {
+        "name": "phase_3.png",
+        "kind": "phase",
+        "t_ms": 3125,
+        "element_id": null,
+        "url": "/api/jobs/7c41e2a95b0d4f3e8a6c1b2d3e4f5a6b/keyframes/phase_3.png"
+      },
+      {
+        "name": "phase_4.png",
+        "kind": "phase",
+        "t_ms": 7300,
+        "element_id": null,
+        "url": "/api/jobs/7c41e2a95b0d4f3e8a6c1b2d3e4f5a6b/keyframes/phase_4.png"
+      },
+      {
+        "name": "phase_5.png",
+        "kind": "phase",
+        "t_ms": 7675,
+        "element_id": null,
+        "url": "/api/jobs/7c41e2a95b0d4f3e8a6c1b2d3e4f5a6b/keyframes/phase_5.png"
+      },
+      {
+        "name": "phase_6.png",
+        "kind": "phase",
+        "t_ms": 8225,
+        "element_id": null,
+        "url": "/api/jobs/7c41e2a95b0d4f3e8a6c1b2d3e4f5a6b/keyframes/phase_6.png"
+      }
+    ]
+  }
+}

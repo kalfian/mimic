@@ -3,47 +3,90 @@
 import { useRef, useState, type KeyboardEvent } from "react";
 
 import { CopyButton } from "@/components/ui/CopyButton";
+import { jsOutput } from "@/lib/spec";
 import type { Outputs } from "@/lib/types";
 
 type TabKey = keyof Outputs;
 
-const TABS: { key: TabKey; label: string; copy: string; note: string; wrap: boolean }[] = [
-  { key: "technical", label: "Technical", copy: "Copy spec", note: "Readable motion spec for a developer.", wrap: true },
-  {
-    key: "llm_prompt",
-    label: "LLM Prompt",
-    copy: "Copy prompt",
-    note: "Paste into a coding LLM or agent, ideally with the recording attached.",
-    wrap: true,
-  },
-  { key: "json", label: "JSON", copy: "Copy JSON", note: "Motion IR (schema 0.1), without per-frame samples.", wrap: false },
-  {
-    key: "css",
-    label: "CSS",
-    copy: "Copy CSS",
-    note: "Suggested implementation. The original site may use different CSS, JS or an animation library.",
-    wrap: false,
-  },
-];
+interface Tab {
+  key: TabKey;
+  label: string;
+  copy: string;
+  note: string;
+  wrap: boolean;
+}
+
+function buildTabs({ schemaVersion, continuous, hasJs }: { schemaVersion: string; continuous: boolean; hasJs: boolean }): Tab[] {
+  const tabs: Tab[] = [
+    { key: "technical", label: "Technical", copy: "Copy spec", note: "Readable motion spec for a developer.", wrap: true },
+    {
+      key: "llm_prompt",
+      label: "LLM Prompt",
+      copy: "Copy prompt",
+      note: "Paste into a coding LLM or agent, ideally with the recording attached.",
+      wrap: true,
+    },
+    {
+      key: "json",
+      label: "JSON",
+      copy: "Copy JSON",
+      note: `Motion IR (schema ${schemaVersion}), without per-frame ${continuous ? "velocity samples" : "samples"}.`,
+      wrap: false,
+    },
+    {
+      key: "css",
+      label: "CSS",
+      copy: "Copy CSS",
+      note: continuous
+        ? "Suggested implementation: layout and, for autoplay-only scrollers, a CSS loop. Drag, momentum and resume need the JS tab."
+        : "Suggested implementation. The original site may use different CSS, JS or an animation library.",
+      wrap: false,
+    },
+  ];
+  if (hasJs) {
+    tabs.push({
+      key: "js",
+      label: "JS",
+      copy: "Copy JS",
+      note: "Suggested implementation: a small driver built from the measured values, not the original code. The site may use a carousel library instead.",
+      wrap: false,
+    });
+  }
+  return tabs;
+}
 
 /** WAI-ARIA tabs (automatic activation, roving tabindex). LLM Prompt is the default: it is the primary output. */
-export function SpecTabs({ outputs, disclaimer }: { outputs: Outputs; disclaimer: string }) {
+export function SpecTabs({
+  outputs,
+  disclaimer,
+  schemaVersion,
+  continuous = false,
+}: {
+  outputs: Outputs;
+  disclaimer: string;
+  /** `spec.schema_version` (stored 0.1 results keep saying 0.1). */
+  schemaVersion: string;
+  continuous?: boolean;
+}) {
   const [active, setActive] = useState<TabKey>("llm_prompt");
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const tab = TABS.find((t) => t.key === active) ?? TABS[1];
-  const text = outputs[active] ?? "";
+  const js = jsOutput(outputs);
+  // The JS tab exists only when the result carries a driver (continuous results).
+  const tabs = buildTabs({ schemaVersion, continuous, hasJs: js != null });
+  const tab = tabs.find((t) => t.key === active) ?? tabs[1];
+  const text = (tab.key === "js" ? js : outputs[tab.key]) ?? "";
 
   const onKeyDown = (e: KeyboardEvent) => {
-    const i = TABS.findIndex((t) => t.key === active);
+    const i = tabs.findIndex((t) => t.key === tab.key);
     let next = -1;
-    if (e.key === "ArrowRight") next = (i + 1) % TABS.length;
-    else if (e.key === "ArrowLeft") next = (i - 1 + TABS.length) % TABS.length;
+    if (e.key === "ArrowRight") next = (i + 1) % tabs.length;
+    else if (e.key === "ArrowLeft") next = (i - 1 + tabs.length) % tabs.length;
     else if (e.key === "Home") next = 0;
-    else if (e.key === "End") next = TABS.length - 1;
+    else if (e.key === "End") next = tabs.length - 1;
     if (next < 0) return;
     e.preventDefault();
-    setActive(TABS[next].key);
-    refs.current[TABS[next].key]?.focus();
+    setActive(tabs[next].key);
+    refs.current[tabs[next].key]?.focus();
   };
 
   return (
@@ -54,8 +97,8 @@ export function SpecTabs({ outputs, disclaimer }: { outputs: Outputs; disclaimer
             Motion specification
           </h2>
           <div role="tablist" aria-label="Output format" onKeyDown={onKeyDown} className="-mb-px flex max-w-full overflow-x-auto">
-            {TABS.map((t) => {
-              const selected = t.key === active;
+            {tabs.map((t) => {
+              const selected = t.key === tab.key;
               return (
                 <button
                   key={t.key}
@@ -81,7 +124,7 @@ export function SpecTabs({ outputs, disclaimer }: { outputs: Outputs; disclaimer
           </div>
         </div>
         <div className="pb-2">
-          <CopyButton text={text} label={tab.copy} variant={active === "llm_prompt" ? "primary" : "secondary"} />
+          <CopyButton text={text} label={tab.copy} variant={tab.key === "llm_prompt" ? "primary" : "secondary"} />
         </div>
       </header>
 

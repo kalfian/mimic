@@ -1,0 +1,731 @@
+{
+  "schema_version": "0.2",
+  "job_id": "7c41e2a95b0d4f3e8a6c1b2d3e4f5a6b",
+  "meta": {
+    "generated_at": "2026-10-03T10:00:00Z",
+    "pipeline_version": "0.1.0",
+    "estimated": true,
+    "disclaimer": "Values are visual estimates from a screen recording, not source CSS."
+  },
+  "mode": "continuous",
+  "source": {
+    "filename": "carousel-drag.mov",
+    "container": "mov",
+    "codec": "h264",
+    "width": 1280,
+    "height": 800,
+    "duration_ms": 9300,
+    "fps_nominal": 60.0,
+    "fps_effective": 55.7,
+    "is_vfr": true,
+    "pixel_ratio": 1,
+    "pixel_ratio_source": "auto",
+    "timing_resolution_ms": 18
+  },
+  "scene": {
+    "viewport_css": {
+      "w": 1280.0,
+      "h": 800.0
+    },
+    "page_background": {
+      "value": "#FAFAFA",
+      "confidence": {
+        "value": 0.8,
+        "band": "high"
+      }
+    }
+  },
+  "interaction": {
+    "type": "drag",
+    "type_source": "heuristic",
+    "type_confidence": {
+      "value": 0.75,
+      "band": "medium"
+    },
+    "pattern": "carousel",
+    "target_element_id": "e1",
+    "target_label": "Scroller (e1)",
+    "target_description": null,
+    "trigger": {
+      "kind": "drag",
+      "reverse_kind": "none",
+      "description": "Autoplaying scroller that is dragged by the pointer; after release it coasts, then autoplay resumes.",
+      "confidence": {
+        "value": 0.6,
+        "band": "medium"
+      }
+    },
+    "direction": "continuous",
+    "total_duration_ms": {
+      "forward": 9300,
+      "reverse": null
+    }
+  },
+  "elements": [
+    {
+      "id": "e1",
+      "label": "Scroller (e1)",
+      "label_source": "heuristic",
+      "role": "scroller",
+      "parent_id": null,
+      "kind": "scroller",
+      "bbox_initial": {
+        "x": 260.0,
+        "y": 300.0,
+        "w": 760.0,
+        "h": 200.0
+      },
+      "bbox_active": {
+        "x": 260.0,
+        "y": 300.0,
+        "w": 760.0,
+        "h": 200.0
+      },
+      "text_like": false,
+      "static": {
+        "border_radius_px": null,
+        "shadow": null,
+        "background_color": {
+          "value": "#F1F1F4",
+          "confidence": {
+            "value": 0.7,
+            "band": "medium"
+          }
+        }
+      }
+    },
+    {
+      "id": "e2",
+      "label": "Card (e2)",
+      "label_source": "heuristic",
+      "role": "card",
+      "parent_id": "e1",
+      "kind": "transform",
+      "bbox_initial": {
+        "x": 268.0,
+        "y": 320.0,
+        "w": 200.0,
+        "h": 160.0
+      },
+      "bbox_active": {
+        "x": 268.0,
+        "y": 320.0,
+        "w": 200.0,
+        "h": 160.0
+      },
+      "text_like": false,
+      "static": {
+        "border_radius_px": {
+          "value": 12.0,
+          "confidence": {
+            "value": 0.45,
+            "band": "low"
+          }
+        },
+        "shadow": null,
+        "background_color": {
+          "value": "#FFFFFF",
+          "confidence": {
+            "value": 0.75,
+            "band": "medium"
+          }
+        }
+      }
+    },
+    {
+      "id": "e3",
+      "label": "Text (e3)",
+      "label_source": "heuristic",
+      "role": "title",
+      "parent_id": "e2",
+      "kind": "transform",
+      "bbox_initial": {
+        "x": 284.0,
+        "y": 440.0,
+        "w": 120.0,
+        "h": 20.0
+      },
+      "bbox_active": {
+        "x": 284.0,
+        "y": 440.0,
+        "w": 120.0,
+        "h": 20.0
+      },
+      "text_like": true,
+      "static": {
+        "border_radius_px": null,
+        "shadow": null,
+        "text_color": {
+          "value": "#1A1A1A",
+          "confidence": {
+            "value": 0.6,
+            "band": "medium"
+          }
+        },
+        "font_size_px": {
+          "value": 16.0,
+          "confidence": {
+            "value": 0.35,
+            "band": "low"
+          }
+        }
+      }
+    }
+  ],
+  "segments": [],
+  "transitions": [],
+  "relationships": [],
+  "continuous": {
+    "element_id": "e1",
+    "axis": "x",
+    "region": {
+      "x": 260.0,
+      "y": 300.0,
+      "w": 760.0,
+      "h": 200.0
+    },
+    "region_confidence": {
+      "value": 0.7,
+      "band": "medium"
+    },
+    "sign_convention": "positive = content moves right (x) / down (y)",
+    "autoplay": {
+      "direction": "right",
+      "speed_px_s": {
+        "value": 39.0,
+        "confidence": {
+          "value": 0.9,
+          "band": "high"
+        }
+      },
+      "velocity_px_s": 39.0,
+      "easing": "linear",
+      "loop": {
+        "observed": false,
+        "period_px": null,
+        "duration_ms": null
+      }
+    },
+    "pitch_px": {
+      "value": 216.0,
+      "confidence": {
+        "value": 0.7,
+        "band": "medium"
+      }
+    },
+    "gap_px": {
+      "value": 16.0,
+      "confidence": {
+        "value": 0.5,
+        "band": "medium"
+      }
+    },
+    "phases": [
+      {
+        "id": "p1",
+        "kind": "autoplay",
+        "start_ms": 0,
+        "end_ms": 1500,
+        "v_start_px_s": 39.0,
+        "v_end_px_s": 39.0,
+        "v_peak_px_s": 39.0,
+        "displacement_px": 58.5,
+        "fit": {
+          "model": "constant",
+          "velocity_px_s": {
+            "value": 39.0,
+            "confidence": {
+              "value": 0.9,
+              "band": "high"
+            }
+          }
+        },
+        "interrupted": false,
+        "evidence": "velocity",
+        "confidence": {
+          "value": 0.9,
+          "band": "high"
+        },
+        "notes": []
+      },
+      {
+        "id": "p2",
+        "kind": "decelerate",
+        "start_ms": 1500,
+        "end_ms": 2000,
+        "v_start_px_s": 39.0,
+        "v_end_px_s": 11.1,
+        "v_peak_px_s": 39.0,
+        "displacement_px": 12.5,
+        "fit": {
+          "model": "ramp",
+          "from_px_s": 39.0,
+          "to_px_s": 0.0,
+          "duration_ms": {
+            "value": 700.0,
+            "confidence": {
+              "value": 0.4,
+              "band": "low"
+            }
+          },
+          "easing": {
+            "keyword": "linear",
+            "cubic_bezier": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ],
+            "nearest_named": "linear",
+            "family": "linear",
+            "rmse": 0.05,
+            "flags": []
+          }
+        },
+        "interrupted": true,
+        "evidence": "velocity",
+        "confidence": {
+          "value": 0.55,
+          "band": "medium"
+        },
+        "notes": [
+          "cut short by a drag before reaching zero"
+        ]
+      },
+      {
+        "id": "p3",
+        "kind": "drag",
+        "start_ms": 2000,
+        "end_ms": 2500,
+        "v_start_px_s": 11.1,
+        "v_end_px_s": -1400.0,
+        "v_peak_px_s": -1500.0,
+        "displacement_px": -619.2,
+        "fit": null,
+        "interrupted": false,
+        "evidence": "velocity",
+        "confidence": {
+          "value": 0.8,
+          "band": "high"
+        },
+        "notes": [
+          "tracking degraded during fast motion"
+        ]
+      },
+      {
+        "id": "p4",
+        "kind": "inertia",
+        "start_ms": 2500,
+        "end_ms": 3750,
+        "v_start_px_s": -1400.0,
+        "v_end_px_s": -2.7,
+        "v_peak_px_s": -1400.0,
+        "displacement_px": -279.5,
+        "fit": {
+          "model": "exponential",
+          "tau_ms": {
+            "value": 200.0,
+            "confidence": {
+              "value": 0.82,
+              "band": "high"
+            }
+          },
+          "v0_px_s": {
+            "value": -1400.0,
+            "confidence": {
+              "value": 0.7,
+              "band": "medium"
+            }
+          },
+          "v_inf_px_s": 0.0
+        },
+        "interrupted": false,
+        "evidence": "velocity",
+        "confidence": {
+          "value": 0.8,
+          "band": "high"
+        },
+        "notes": []
+      },
+      {
+        "id": "p5",
+        "kind": "drag",
+        "start_ms": 3750,
+        "end_ms": 5000,
+        "v_start_px_s": -2.7,
+        "v_end_px_s": -750.0,
+        "v_peak_px_s": -850.0,
+        "displacement_px": -925.3,
+        "fit": null,
+        "interrupted": false,
+        "evidence": "velocity",
+        "confidence": {
+          "value": 0.8,
+          "band": "high"
+        },
+        "notes": []
+      },
+      {
+        "id": "p6",
+        "kind": "inertia",
+        "start_ms": 5000,
+        "end_ms": 5500,
+        "v_start_px_s": -750.0,
+        "v_end_px_s": -69.3,
+        "v_peak_px_s": -750.0,
+        "displacement_px": -142.9,
+        "fit": {
+          "model": "exponential",
+          "tau_ms": {
+            "value": 210.0,
+            "confidence": {
+              "value": 0.6,
+              "band": "medium"
+            }
+          },
+          "v0_px_s": {
+            "value": -750.0,
+            "confidence": {
+              "value": 0.65,
+              "band": "medium"
+            }
+          },
+          "v_inf_px_s": 0.0
+        },
+        "interrupted": true,
+        "evidence": "velocity",
+        "confidence": {
+          "value": 0.7,
+          "band": "medium"
+        },
+        "notes": [
+          "re-grabbed before coming to rest"
+        ]
+      },
+      {
+        "id": "p7",
+        "kind": "drag",
+        "start_ms": 5500,
+        "end_ms": 6300,
+        "v_start_px_s": -69.3,
+        "v_end_px_s": 900.0,
+        "v_peak_px_s": 990.0,
+        "displacement_px": 562.1,
+        "fit": null,
+        "interrupted": false,
+        "evidence": "velocity",
+        "confidence": {
+          "value": 0.8,
+          "band": "high"
+        },
+        "notes": []
+      },
+      {
+        "id": "p8",
+        "kind": "inertia",
+        "start_ms": 6300,
+        "end_ms": 7000,
+        "v_start_px_s": 900.0,
+        "v_end_px_s": 22.6,
+        "v_peak_px_s": 900.0,
+        "displacement_px": 166.7,
+        "fit": {
+          "model": "exponential",
+          "tau_ms": {
+            "value": 190.0,
+            "confidence": {
+              "value": 0.7,
+              "band": "medium"
+            }
+          },
+          "v0_px_s": {
+            "value": 900.0,
+            "confidence": {
+              "value": 0.68,
+              "band": "medium"
+            }
+          },
+          "v_inf_px_s": 0.0
+        },
+        "interrupted": true,
+        "evidence": "velocity",
+        "confidence": {
+          "value": 0.75,
+          "band": "medium"
+        },
+        "notes": [
+          "re-grabbed before coming to rest"
+        ]
+      },
+      {
+        "id": "p9",
+        "kind": "drag",
+        "start_ms": 7000,
+        "end_ms": 7600,
+        "v_start_px_s": 22.6,
+        "v_end_px_s": -1650.0,
+        "v_peak_px_s": -1719.7,
+        "displacement_px": -718.3,
+        "fit": null,
+        "interrupted": false,
+        "evidence": "velocity",
+        "confidence": {
+          "value": 0.8,
+          "band": "high"
+        },
+        "notes": [
+          "tracking degraded during fast motion"
+        ]
+      },
+      {
+        "id": "p10",
+        "kind": "stop",
+        "start_ms": 7600,
+        "end_ms": 7750,
+        "v_start_px_s": -1650.0,
+        "v_end_px_s": 0.0,
+        "v_peak_px_s": -1650.0,
+        "displacement_px": -27.2,
+        "fit": null,
+        "interrupted": false,
+        "evidence": "velocity",
+        "confidence": {
+          "value": 0.45,
+          "band": "low"
+        },
+        "notes": [
+          "pointer likely stopped before release, or hard snap (ambiguous without cursor)"
+        ]
+      },
+      {
+        "id": "p11",
+        "kind": "paused",
+        "start_ms": 7750,
+        "end_ms": 7850,
+        "v_start_px_s": 0.0,
+        "v_end_px_s": 0.0,
+        "v_peak_px_s": 0.0,
+        "displacement_px": 0.0,
+        "fit": null,
+        "interrupted": false,
+        "evidence": "velocity",
+        "confidence": {
+          "value": 0.6,
+          "band": "medium"
+        },
+        "notes": []
+      },
+      {
+        "id": "p12",
+        "kind": "resume",
+        "start_ms": 7850,
+        "end_ms": 8600,
+        "v_start_px_s": 0.0,
+        "v_end_px_s": 39.0,
+        "v_peak_px_s": 39.0,
+        "displacement_px": 14.6,
+        "fit": {
+          "model": "ramp",
+          "from_px_s": 0.0,
+          "to_px_s": 39.0,
+          "duration_ms": {
+            "value": 750.0,
+            "confidence": {
+              "value": 0.7,
+              "band": "medium"
+            }
+          },
+          "easing": {
+            "keyword": "ease-in-out",
+            "cubic_bezier": [
+              0.42,
+              0.0,
+              0.58,
+              1.0
+            ],
+            "nearest_named": "ease-in-out",
+            "family": "ease-in-out",
+            "rmse": 0.03,
+            "flags": []
+          }
+        },
+        "interrupted": false,
+        "evidence": "velocity",
+        "confidence": {
+          "value": 0.7,
+          "band": "medium"
+        },
+        "notes": []
+      },
+      {
+        "id": "p13",
+        "kind": "autoplay",
+        "start_ms": 8600,
+        "end_ms": 9300,
+        "v_start_px_s": 39.0,
+        "v_end_px_s": 39.0,
+        "v_peak_px_s": 39.0,
+        "displacement_px": 27.3,
+        "fit": {
+          "model": "constant",
+          "velocity_px_s": {
+            "value": 39.0,
+            "confidence": {
+              "value": 0.85,
+              "band": "high"
+            }
+          }
+        },
+        "interrupted": false,
+        "evidence": "velocity",
+        "confidence": {
+          "value": 0.85,
+          "band": "high"
+        },
+        "notes": []
+      }
+    ],
+    "behavior": {
+      "pause": {
+        "on": "unknown",
+        "on_confidence": {
+          "value": 0.35,
+          "band": "low"
+        },
+        "decel_ms": {
+          "value": 700.0,
+          "confidence": {
+            "value": 0.4,
+            "band": "low"
+          }
+        },
+        "easing": {
+          "keyword": "linear",
+          "cubic_bezier": [
+            0.0,
+            0.0,
+            1.0,
+            1.0
+          ],
+          "nearest_named": "linear",
+          "family": "linear",
+          "rmse": 0.05,
+          "flags": []
+        },
+        "stops_completely": false
+      },
+      "drag": {
+        "count": 4,
+        "follows_pointer": null,
+        "pointer_ratio": null,
+        "peak_speed_px_s": {
+          "value": 1720.0,
+          "confidence": {
+            "value": 0.75,
+            "band": "medium"
+          }
+        }
+      },
+      "inertia": {
+        "model": "exponential",
+        "tau_ms": {
+          "value": 200.0,
+          "confidence": {
+            "value": 0.8,
+            "band": "high"
+          }
+        },
+        "duration_ms": null,
+        "easing": null,
+        "release_speed_min_px_s": 750.0,
+        "release_speed_max_px_s": 1400.0,
+        "instances": 3
+      },
+      "snap": {
+        "kind": "abrupt_ambiguous",
+        "step_px": null,
+        "duration_ms": null,
+        "easing": null,
+        "overshoot": false
+      },
+      "resume": {
+        "delay_after_rest_ms": {
+          "value": 100.0,
+          "confidence": {
+            "value": 0.5,
+            "band": "medium"
+          }
+        },
+        "delay_after_release_ms": {
+          "value": 250.0,
+          "confidence": {
+            "value": 0.45,
+            "band": "low"
+          }
+        },
+        "ramp_ms": {
+          "value": 750.0,
+          "confidence": {
+            "value": 0.7,
+            "band": "medium"
+          }
+        },
+        "easing": {
+          "keyword": "ease-in-out",
+          "cubic_bezier": [
+            0.42,
+            0.0,
+            0.58,
+            1.0
+          ],
+          "nearest_named": "ease-in-out",
+          "family": "ease-in-out",
+          "rmse": 0.03,
+          "flags": []
+        },
+        "to_speed_px_s": 39.0,
+        "direction_preserved": true
+      }
+    },
+    "span_ms": {
+      "start_ms": 0,
+      "end_ms": 9300
+    }
+  },
+  "cursor": {
+    "visible": false,
+    "confidence": 0.0,
+    "events": []
+  },
+  "structure": [],
+  "interpretation": {
+    "provider": "none",
+    "model": null,
+    "status": "disabled",
+    "duration_ms": null
+  },
+  "warnings": [
+    {
+      "code": "cursor_not_visible",
+      "severity": "warn",
+      "message": "No cursor was visible; what starts and stops the motion is inferred from the motion only."
+    },
+    {
+      "code": "vfr_source",
+      "severity": "info",
+      "message": "The recording has a variable frame rate; frame timestamps were used as recorded."
+    },
+    {
+      "code": "tracking_degraded",
+      "severity": "warn",
+      "message": "About 12% of frames during the fast drags (p3, p9) could not be tracked precisely; their values are less certain."
+    },
+    {
+      "code": "loop_period_not_observed",
+      "severity": "info",
+      "message": "The content never repeated within the recording, so the loop length is not known."
+    }
+  ],
+  "initial_state": {},
+  "active_state": {}
+}

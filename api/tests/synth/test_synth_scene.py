@@ -103,3 +103,43 @@ def test_frame_dedup_returns_identical_frames_when_static() -> None:
     a, b = r.frame(0.1), r.frame(0.2)
     assert a is b
     assert not np.array_equal(a, r.frame(0.6))
+
+
+# ---- drivers (PLAN-continuous §8.1) -----------------------------------------------------------
+
+
+def test_driver_overrides_translate_and_enters_the_dedup_key() -> None:
+    child = Node(id="k", x=10, y=10, w=20, h=20, fill=(0, 0, 0))
+    track = Node(id="tr", shape="group", x=40, y=40, w=100, h=60, children=[child], tx=99.0)
+    sc = _scene([track])
+    sc = Scene(
+        width=sc.width, height=sc.height, background=BG, static_nodes=[], nodes=[track],
+        timeline=Timeline(), cursor=None, duration_s=1.0,
+        drivers={"tr": lambda t: (10.0 * t, -2.0)},
+    )  # fmt: skip
+    assert sc.box("k", 0.5) == pytest.approx((55.0, 48.0, 20.0, 20.0))  # base tx ignored
+    r = Renderer(sc)
+    cx, cy = _centroid(_ink(r.frame(0.25)))
+    assert (cx, cy) == (pytest.approx(62.5, abs=0.02), pytest.approx(58.0, abs=0.02))
+    assert r.frame(0.25) is not r.frame(0.5)  # driver output is part of the state key
+    assert len(sc.state_key(0.1)) == 3
+
+
+def test_scene_without_drivers_keeps_its_key_shape() -> None:
+    node = Node(id="b", x=40, y=40, w=80, h=60, fill=(0, 0, 0))
+    sc = _scene([node], [Tween("b", "translateX", "fwd", 0.5, 0.2, 0.0, 10.0, "ease-out")])
+    assert sc.drivers == {}
+    key = sc.state_key(0.6)
+    assert len(key) == 2 and key[1] is None  # (tween values, cursor) as before drivers existed
+
+
+def test_driver_validation() -> None:
+    node = Node(id="b", x=40, y=40, w=80, h=60, fill=(0, 0, 0))
+    with pytest.raises(ValueError, match="unknown node"):
+        Scene(200, 160, BG, [], [node], Timeline(), None, 1.0, drivers={"x": lambda t: (0, 0)})
+    tw = Tween("b", "translateX", "fwd", 0.1, 0.2, 0.0, 5.0, "linear")
+    with pytest.raises(ValueError, match="driven"):
+        Scene(200, 160, BG, [], [node], Timeline([tw]), None, 1.0, drivers={"b": lambda t: (0, 0)})
+    static = Node(id="s", x=0, y=0, w=10, h=10)
+    with pytest.raises(ValueError, match="static node"):
+        Scene(200, 160, BG, [static], [], Timeline(), None, 1.0, drivers={"s": lambda t: (0, 0)})

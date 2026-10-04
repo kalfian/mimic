@@ -1,0 +1,56 @@
+CONTINUOUS MOTION
+
+Scroller: News ticker (e1) — carousel, vertical (y axis)
+Type: Draggable scroller (carousel) — medium confidence (70%), from heuristic
+Trigger: Autoplaying scroller that is dragged by the pointer; after release it coasts, then autoplay resumes.
+Trigger kind: drag — medium confidence (60%)
+Region: 320×600 px at x 480, y 100 — medium (65%)
+Card pitch (card + gap): not observed
+Analysed span: 0–7000 ms (≈7000 ms)
+
+AUTOPLAY
+
+Direction: up (content moves upward)
+Speed: ≈30 px/s, linear — high (88%)
+Loop: not observed (the content did not repeat within the recording)
+
+PHASES
+
+#   Kind      Time (ms)  Velocity (px/s)  Key value                                         Confidence
+p1  autoplay  0–2000     -30 → -30        constant ≈30 px/s                                 high (88%)
+p2  drag      2000–2600  -30 → -800       peak -900 px/s                                    high (80%)
+p3  inertia   2600–3800  -800 → -6        τ ≈250 ms (medium), v0 -800 px/s                  medium (75%)
+p5  resume    4200–4800  0 → -30          ramp 0 → -30 px/s over ≈600 ms (medium), ease-in  medium (60%)
+p6  autoplay  4800–7000  -30 → -30        constant ≈30 px/s                                 high (85%)
+
+BEHAVIOUR
+
+Pause: not observed
+Drag: 1 drag
+  Follows the pointer: unknown (no cursor visible to compare)
+  Peak speed: ≈900 px/s — medium (70%)
+Momentum (inertia): exponential decay, 1 release
+  Time constant τ: ≈250 ms — medium (75%)
+  Release speeds: ≈800 px/s
+Snap: not observed
+Resume:
+  Ramp: ≈600 ms, ease-in — medium (60%)
+  Speed after resuming: ≈30 px/s, same direction
+
+APPEARANCE
+
+News ticker (e1): 320×600 px at x 480, y 100
+
+UNCERTAIN OBSERVATIONS
+
+- p4, 3800–4200 ms: possibly paused; confidence low (25%). Not included above.
+- resume delay after rest: ≈400 ms (25% confidence). Not included above.
+
+NOTES
+
+- Values are visual estimates from a screen recording, not source CSS.
+- Geometry is in CSS px; display scale 2x as set on upload.
+- Timing resolution: about 18ms per frame (60 fps effective).
+- Signed velocities: positive = content moves right (x) / down (y).
+- Element labels are heuristic (AI labeling status: disabled).
+- No cursor was visible; what starts and stops the motion is inferred from the motion only.

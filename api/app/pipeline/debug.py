@@ -8,6 +8,10 @@
 * ``elements.json`` — element candidates (CSS boxes, kinds, parents, A→B warps)
 * ``masks/*.png`` — state A/B, change mask, per-element masks
 * ``tracks/<element>_<segment>_<property>.csv`` — per-frame series
+* continuous / ambient regions (PLAN-continuous §9 P2): ``masks/activity_mean.png`` (mean
+  pass-1 cell activity), ``activity.csv`` (active cells per frame), ``regime.json``,
+  ``scroller_<i>.json`` (phases, behaviour) + ``displacement_<i>.csv`` per analysed region,
+  ``layout.json`` (rest frame time, scroller / card / title boxes)
 
 ``python -m app.pipeline.debug VIDEO [--out DIR] [--pixel-ratio auto|1|2|3] [--keyframes]``
 runs the M1 stages only (scan → decode → regions → track → photometric → shadow → radius
@@ -36,6 +40,7 @@ from app.models.measure import (
     Rect,
     Scale,
     ScanResult,
+    ScrollerAnalysis,
     WindowFrames,
 )
 from app.pipeline.params import DEFAULT_PARAMS, MeasureParams
@@ -73,6 +78,14 @@ class DebugDump:
         if not self.enabled:
             return
         self._path(rel).write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
+
+    def write_csv(self, rel: str, header: list[str], rows: list[list[Any]]) -> None:
+        if not self.enabled:
+            return
+        with self._path(rel).open("w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(header)
+            w.writerows(rows)
 
     def energy(self, scan: ScanResult, stats: Any | None = None) -> None:
         if not self.enabled:
@@ -140,6 +153,35 @@ class DebugDump:
                 w.writerow(["t_s", "value", "quality"])
                 for t, v, q in zip(s.times, s.values, s.quality, strict=True):
                     w.writerow([f"{t:.4f}", f"{v:.5f}", f"{q:.4f}"])
+
+
+def scroller_json(sa: ScrollerAnalysis) -> dict[str, Any]:
+    """One analysed ambient region (continuous mode debug dump)."""
+    return {
+        "region": _rect(sa.region.rect_css), "is_scroller": sa.is_scroller,
+        "reason": sa.reason, "axis": sa.axis, "coherence": _num(sa.coherence),
+        "viewport": _rect(sa.series.region) if sa.series is not None else None,
+        "autoplay_velocity": _num(sa.autoplay_velocity) if sa.autoplay_velocity else None,
+        "loop_period_px": _num(sa.loop_period_px) if sa.loop_period_px else None,
+        "pitch_px": _num(sa.pitch_px) if sa.pitch_px else None,
+        "gap_px": _num(sa.gap_px) if sa.gap_px else None,
+        # card census (P2b): set when it supplied pitch / gap
+        "card_census": {
+            "card_len_px": _num(sa.card_len_px), "card_cross_px": _num(sa.card_cross_px),
+            "zoom_per_px2": sa.card_zoom_per_px2, "zoom_reach_px": _num(sa.card_zoom_reach_px),
+            "zoom_confidence": _num(sa.card_zoom_confidence),
+        } if sa.card_len_px is not None else None,
+        "phases": [
+            {"kind": p.kind, "start_s": _num(p.start_s), "end_s": _num(p.end_s),
+             "v_start": _num(p.v_start), "v_end": _num(p.v_end), "v_peak": _num(p.v_peak),
+             "displacement": _num(p.displacement), "interrupted": p.interrupted,
+             "fit": p.fit.model_dump() if p.fit is not None else None,
+             "confidence": _num(p.confidence), "notes": p.notes}
+            for p in sa.phases
+        ],
+        "behavior": sa.behavior.model_dump() if sa.behavior is not None else None,
+        "warnings": [w.model_dump() for w in sa.warnings],
+    }  # fmt: skip
 
 
 def element_json(e: ElementCandidate) -> dict[str, Any]:

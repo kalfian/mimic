@@ -21,10 +21,15 @@ from typing import Literal, NamedTuple
 import numpy as np
 
 from app.models.ir import (
+    Axis,
+    Behavior,
     Direction,
     Easing,
     ElementKind,
     InteractionType,
+    PhaseEvidence,
+    PhaseFit,
+    PhaseKind,
     PixelRatio,
     PixelRatioSource,
     Property,
@@ -359,3 +364,130 @@ class HeuristicInteraction:
     direction: Direction
     confidence: float
     rule: int  # matched rule number from the PLAN §6.10 table (1..8)
+
+
+# --------------------------------------------------------------------------------------------
+# Continuous mode (PLAN-continuous §3-§4): regime detection + scroller measurement
+# --------------------------------------------------------------------------------------------
+
+#: Why an ambient region is not a measurable scroller (selects the
+#: ``continuous_motion_unsupported`` message variant, PLAN-continuous §3.5).
+NotScrollerReason = Literal["two_axis", "untrackable", "opposing_unsplit"]
+#: Phase kinds that mean the user interacted (``decide_mode``: scroller with interaction).
+INTERACTION_PHASE_KINDS: frozenset[str] = frozenset(
+    {"decelerate", "paused", "drag", "inertia", "snap", "stop", "resume"}
+)
+
+
+@dataclass(slots=True)
+class AmbientRegion:
+    """Cells active from the start of the recording (§3.2), cursor removed."""
+
+    rect_css: Rect  # bounding box of the connected cell component, CSS px full-frame
+    cells: int  # number of active cells in the component
+    lead_frac: float  # mean leading-window activity fraction over its cells (0..1)
+    #: Several pieces of one scroller row merged (``regime.merge_row_pieces``): the tracking box
+    #: then spans every changed column along the axis, gaps included.
+    merged: bool = False
+
+
+@dataclass(slots=True)
+class RegimeReport:
+    """Output of ``continuous.regime.detect_regime`` (§3.2). No ambient region -> transition.
+
+    The cursor track is not repeated here; it is ``ScanResult.cursor`` / ``CursorTrack``.
+    """
+
+    ambient: list[AmbientRegion]  # largest first, <= ContinuousParams.max_ambient_regions
+    cell_css: float  # grid cell size used, CSS px
+    grid_shape: tuple[int, int]  # (rows, cols) of the activity grid
+    lead_window_s: tuple[float, float]  # [start, end] seconds of the leading window
+
+    @property
+    def has_ambient(self) -> bool:
+        return bool(self.ambient)
+
+
+@dataclass(slots=True)
+class DisplacementSeries:
+    """Per real (non-duplicate) frame displacement of the scroller content (§4.3).
+
+    ``pos`` is signed along ``axis`` (+ = content moves right / down), ``pos[0] == 0``.
+    Fits use ``pos``; velocities are derived for labelling/UI only.
+    """
+
+    times: np.ndarray  # float64 (N,), seconds (VFR-aware)
+    pos: np.ndarray  # float64 (N,), CSS px
+    quality: np.ndarray  # float64 (N,), 0..1 (NCC peak or ECC rho)
+    axis: Axis
+    region: Rect  # refined scroller viewport, CSS px full-frame
+    region_confidence: float
+    dt_median: float  # seconds
+
+
+@dataclass(slots=True)
+class PhaseCandidate:
+    """One labelled phase before IR assembly (§4.5). Velocities CSS px/s, signed."""
+
+    kind: PhaseKind
+    start_s: float
+    end_s: float
+    v_start: float
+    v_end: float
+    v_peak: float  # signed velocity with the largest magnitude
+    displacement: float  # CSS px, signed
+    fit: PhaseFit | None = None  # IR fit model (values carry their own confidence)
+    interrupted: bool = False
+    evidence: PhaseEvidence = "velocity"
+    confidence: float = 0.0  # label confidence
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class ScrollerAnalysis:
+    """Everything measured for one ambient region (``continuous.measure.analyse_ambient``).
+
+    ``is_scroller`` false -> only ``region``/``reason``/``coherence`` are meaningful.
+    """
+
+    region: AmbientRegion
+    is_scroller: bool
+    reason: NotScrollerReason | None = None
+    axis: Axis | None = None
+    coherence: float = 0.0  # fraction of coherence-window frames with response >= threshold
+    series: DisplacementSeries | None = None
+    autoplay_velocity: float | None = None  # CSS px/s signed; None = no autoplay
+    autoplay_confidence: float = 0.0
+    loop_period_px: float | None = None  # None = not observed (never guessed)
+    loop_confidence: float = 0.0
+    pitch_px: float | None = None
+    pitch_confidence: float = 0.0
+    gap_px: float | None = None
+    gap_confidence: float = 0.0
+    #: Card census (``continuous.cards``, P2b), set when it supplied pitch / gap: card size
+    #: along / across the axis (CSS px; the centre card when the cards scale with their
+    #: position) and the relative size change per CSS px² of distance from the scroller centre
+    #: (None = rigid cards); with it, the farthest measured card-centre distance (CSS px) and
+    #: the scale fit's confidence (``CensusResult.zoom_confidence``, uncapped).
+    card_len_px: float | None = None
+    card_cross_px: float | None = None
+    card_zoom_per_px2: float | None = None
+    card_zoom_reach_px: float | None = None
+    card_zoom_confidence: float = 0.0
+    phases: list[PhaseCandidate] = field(default_factory=list)
+    behavior: Behavior | None = None  # IR model, aggregated by ``kinematics.aggregate``
+    warnings: list[SpecWarning] = field(default_factory=list)
+
+    @property
+    def has_interaction(self) -> bool:
+        """Any of decelerate / paused / drag / inertia / snap / stop / resume (§3.3)."""
+        return any(p.kind in INTERACTION_PHASE_KINDS for p in self.phases)
+
+
+@dataclass(slots=True)
+class ContinuousMeasurement:
+    """Layer A result of a continuous-mode job; ``Measurement.continuous`` (P2 integration)."""
+
+    regime: RegimeReport
+    scroller: ScrollerAnalysis  # the analysed (chosen) scroller
+    extra_scrollers: int = 0  # other scrollers ignored -> warning extra_scrollers_ignored

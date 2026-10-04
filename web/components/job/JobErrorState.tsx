@@ -49,6 +49,8 @@ export function JobErrorState({ error, job, onRetry }: { error: ApiError; job: J
           </div>
         ) : null}
 
+        {error.code === "continuous_motion_unsupported" ? <MeasurableMotion /> : null}
+
         <div className="flex flex-wrap gap-3">
           <Link href="/" className={buttonClass("primary")}>
             Upload another recording
@@ -66,6 +68,43 @@ export function JobErrorState({ error, job, onRetry }: { error: ApiError; job: J
           <StageList job={job} />
         </aside>
       ) : null}
+    </div>
+  );
+}
+
+/** What the analyser supports, for failures caused by motion it can't model (PRD §25/§26). */
+function MeasurableMotion() {
+  const rows: { title: string; body: string; ok: boolean }[] = [
+    {
+      title: "One interaction",
+      body: "A component at rest, one hover, click or press, then rest again. A looping animation elsewhere on the page is usually ignored.",
+      ok: true,
+    },
+    {
+      title: "One scroller",
+      body: "A marquee or auto-scrolling carousel moving along one axis: autoplay, pause, drag, momentum, snap and resume are measured.",
+      ok: true,
+    },
+    {
+      title: "Not measurable",
+      body: "Two-axis or rotating motion, pulsing or morphing loops, several scrollers moving in opposite directions, page scrolling.",
+      ok: false,
+    },
+  ];
+  return (
+    <div className="rounded-md border border-line bg-surface">
+      <h2 className="caption border-b border-line px-4 py-2">What Mimic can measure</h2>
+      <dl className="divide-y divide-line">
+        {rows.map((r) => (
+          <div key={r.title} className="grid gap-x-4 gap-y-0.5 px-4 py-2.5 sm:grid-cols-[9rem_minmax(0,1fr)]">
+            <dt className={`flex items-center gap-2 text-sm font-medium ${r.ok ? "text-ink" : "text-ink-3"}`}>
+              <span className={`inline-block h-3 w-1.5 shrink-0 rounded-[2px] ${r.ok ? "bg-signal-fill" : "border border-dashed border-ink-3"}`} aria-hidden="true" />
+              {r.title}
+            </dt>
+            <dd className="text-sm text-ink-2">{r.body}</dd>
+          </div>
+        ))}
+      </dl>
     </div>
   );
 }

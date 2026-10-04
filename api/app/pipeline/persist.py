@@ -32,17 +32,24 @@ from app.core.storage import MEASUREMENT_FILE
 from app.models import ir
 from app.models.ir import SpecWarning
 from app.models.measure import (
+    AmbientRegion,
+    ContinuousMeasurement,
+    DisplacementSeries,
     ElementCandidate,
     FittedTransition,
     HeuristicInteraction,
+    PhaseCandidate,
     ProbeInfo,
     PropertySeries,
     Rect,
+    RegimeReport,
     Scale,
+    ScrollerAnalysis,
 )
 from app.pipeline.assemble import Measurement, SegmentWindow
 
-#: Stored as ``format``; bump on incompatible changes.
+#: Stored as ``format``; bump on incompatible changes. Still 1 after IR 0.2: the only new
+#: ``Measurement`` field (``continuous``) has a default, so version-1 files decode unchanged.
 FORMAT_VERSION = 1
 
 DATACLASSES: dict[str, type] = {
@@ -57,6 +64,13 @@ DATACLASSES: dict[str, type] = {
         FittedTransition,
         PropertySeries,
         HeuristicInteraction,
+        # continuous mode (PLAN-continuous §5.3)
+        ContinuousMeasurement,
+        RegimeReport,
+        AmbientRegion,
+        ScrollerAnalysis,
+        DisplacementSeries,
+        PhaseCandidate,
     )
 }
 #: Every Pydantic model defined in the IR module may appear (values, easing, warnings, ...).

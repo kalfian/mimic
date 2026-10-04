@@ -6,7 +6,7 @@ import { TimelineInspector } from "@/components/result/TimelineInspector";
 import type { Playback } from "@/components/result/usePlayback";
 import { LabelSourceTag } from "@/components/ui/LabelSourceTag";
 import { Panel } from "@/components/ui/Panel";
-import { BAND_LABELS, formatChange, formatEasing, formatMs, formatPercent, REVERSE_TRIGGER_LABELS, TRIGGER_LABELS } from "@/lib/format";
+import { appearanceFacts, BAND_LABELS, formatChange, formatEasing, formatMs, formatPercent, REVERSE_TRIGGER_LABELS, TRIGGER_LABELS } from "@/lib/format";
 import {
   activeRowsAt,
   axisTicks,
@@ -63,6 +63,7 @@ export function MotionTimeline({ spec, playback }: { spec: MotionSpec; playback:
   const matrix = useMemo(() => tracks.map((tr) => lanes.map((l) => l.rows.find((r) => r.key === tr.key) ?? null)), [tracks, lanes]);
   const groupStart = useMemo(() => tracks.map((tr, i) => i === 0 || tracks[i - 1].element_id !== tr.element_id), [tracks]);
   const labelSources = useMemo(() => new Map(spec.elements.map((e) => [e.id, e.label_source])), [spec.elements]);
+  const appearance = useMemo(() => new Map(spec.elements.map((e) => [e.id, appearanceFacts(e.static)])), [spec.elements]);
   const uncertainTracks = useMemo(() => uncertainTrackKeys(model), [model]);
 
   const firstRow = lanes.find((l) => l.rows.length > 0)?.rows[0] ?? null;
@@ -274,6 +275,7 @@ export function MotionTimeline({ spec, playback }: { spec: MotionSpec; playback:
               transition={inspected ? (spec.transitions.find((x) => x.id === inspected.transition_id) ?? null) : null}
               labelSource={inspected ? (labelSources.get(inspected.element_id) ?? null) : null}
               source={inspected && inspected.transition_id !== selected?.transition_id ? "preview" : "selected"}
+              appearance={inspected ? appearance.get(inspected.element_id) : undefined}
             />
           </div>
         </>

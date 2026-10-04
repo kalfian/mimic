@@ -14,6 +14,7 @@
  */
 
 import { ApiError } from "./errors";
+import { normalizeResult } from "./spec";
 import type { MockScenario } from "./mock/mockApi";
 import type {
   AdminUser,
@@ -482,10 +483,12 @@ export async function getJob(id: string, signal?: AbortSignal): Promise<JobStatu
 
 /** `GET /api/jobs/{id}/result` — rejects with code `not_ready` (409) until the job succeeded. */
 export async function getResult(id: string, signal?: AbortSignal): Promise<ResultEnvelope> {
-  return call(
+  // stored schema 0.1 results come back verbatim without `spec.mode`: fill it in ("transition")
+  const env = await call(
     async () => (await loadMock()).mockGetResult(id, signal),
     () => request<ResultEnvelope>(`${jobPath(id)}/result`, { signal, validate: looksLikeResult }),
   );
+  return normalizeResult(env);
 }
 
 /**

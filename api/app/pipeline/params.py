@@ -249,6 +249,120 @@ class KeyframeParams:
 
 
 @dataclass(frozen=True, slots=True)
+class ContinuousParams:
+    """Continuous / looping scroller analysis (PLAN-continuous §3-§4). Velocities CSS px/s.
+
+    Starting defaults from the plan; calibrate in P2 (§4.6, §8.4) without relaxing the targets.
+    """
+
+    # §3.1 pass-1 activity grid
+    cell_css: float = 16.0
+    cell_active_frac: float = 0.005  # cell active if >= this fraction of its pixels changed
+    # §3.2 ambient regions
+    lead_window_s: float = 0.6
+    lead_min_frames: int = 10
+    ambient_lead_frac: float = 0.5
+    ambient_close_cells: int = 3  # morphological close kernel, cells
+    ambient_min_cells: int = 2
+    max_ambient_regions: int = 3
+    # §3.3 decision / §3.4 masked transition path
+    page_scroll_area_frac: float = 0.60  # scroller covering more of the frame -> page scroll
+    page_scroll_span_frac: float = 0.90  # ... or >= this of both frame dimensions
+    ambient_mask_dilate_css: float = 8.0
+    # §4.1 streaming region reader
+    region_max_fps: float = 60.0
+    region_grow_cells: int = 2
+    dup_max_abs_diff: int = 1
+    # §4.2 coherence / axis test
+    coherence_window_s: float = 1.0
+    coherence_min_response: float = 0.3
+    coherence_min_frac: float = 0.70
+    coherence_max_perp_px: float = 0.25
+    coherence_axis_dominance: float = 5.0
+    coherence_min_shift_px: float = 0.3
+    split_min_dv: float = 10.0  # opposing sub-scroller split: |dv| > max(this, frac * |v|)
+    split_min_dv_frac: float = 0.25
+    # §4.3 displacement
+    max_accel_px_s2: float = 60_000.0
+    pc_min_response: float = 0.3
+    pc_max_dev_px: float = 8.0  # fall back to prediction if |d - d_hat| > max(px, frac*|d_hat|)
+    pc_max_dev_frac: float = 0.5
+    ncc_inset_pad_px: float = 16.0
+    ncc_window_min_px: float = 6.0
+    ncc_window_frac: float = 0.3
+    ecc_gauss_filt: int = 3
+    blur_retry_below_q: float = 0.6
+    multiscale_shift_frac: float = 0.35
+    consistency_every: int = 4
+    consistency_tol_px: float = 1.0
+    consistency_low_q: float = 0.4
+    velocity_half_window: int = 2  # samples each side for the smoothed velocity
+    degraded_q: float = 0.5
+    degraded_max_frac: float = 0.10  # more low-q frames in a phase -> tracking_degraded
+    degraded_conf_factor: float = 0.7
+    # §4.4 panorama
+    pano_max_contrib: int = 4
+    loop_min_lag_frac: float = 0.25
+    loop_min_ncc: float = 0.9
+    loop_min_overlap_frac: float = 0.5
+    pitch_min_prominence: float = 0.3
+    # §4.5 phase segmentation
+    autoplay_cv_max: float = 0.15
+    autoplay_max_speed: float = 400.0
+    label_auto_tol: float = 3.0  # 'A' if |v - v_auto| <= max(tol, frac * |v_auto|)
+    label_auto_tol_frac: float = 0.12
+    label_zero_tol: float = 5.0  # 'Z' if |v| <= max(tol, frac * |v_auto|)
+    label_zero_tol_frac: float = 0.15
+    min_run_samples: int = 3
+    release_search_frac: float = 0.7  # candidate release indices in the last 70 % of a run
+    exp_min_samples: int = 6
+    tau_min_s: float = 0.040
+    tau_max_s: float = 2.0
+    exp_v0_zero_mult: float = 3.0
+    exp_max_monotone_violations: int = 1
+    stop_from_speed: float = 300.0
+    stop_max_frames: int = 2
+    rest_min_s: float = 0.100
+    snap_min_resultant: float = 0.9
+    snap_single_tol_px: float = 2.0
+    overshoot_px: float = 1.0
+    # §4.5 step 8 cursor fusion
+    hover_enter_window_ms: tuple[float, float] = (-400.0, 100.0)
+    pointer_ratio_tol: float = 0.15
+    pointer_ratio_min_frac: float = 0.6
+    release_divergence: float = 0.25
+    release_override_frames: int = 3
+    # §4.6 confidence
+    q_track_lo: float = 0.6
+    q_track_span: float = 0.35
+    speed_full_s: float = 1.0
+    speed_cv_zero: float = 0.1
+    tau_rel_se_k: float = 2.0
+    tau_n_min: int = 4
+    tau_n_span: int = 12
+    label_sep_base: float = 0.4
+    label_sep_bic_span: float = 10.0
+    agreement_min_factor: float = 0.6
+    conf_pause_hover: float = 0.85
+    conf_pause_press: float = 0.7
+    cap_speed: float = 0.95
+    cap_tau: float = 0.9
+    cap_release: float = 0.85
+    cap_snap_step: float = 0.8
+    cap_snap_single: float = 0.5
+    cap_trigger_no_cursor: float = 0.4
+    cap_loop: float = 0.9
+    cap_region: float = 0.7
+    cap_pitch: float = 0.8
+    #: Position-dependent card scale (P2c): a fitted curve whose family (quadratic) is assumed
+    #: and whose far end is the farthest whole card seen, so at most medium (as the census's
+    #: zoomed pitch, ``cards.ZOOM_CONF_CAP``).
+    cap_card_scale: float = 0.6
+    # §4.7 IR
+    samples_max: int = 900  # == models.ir.CONTINUOUS_SAMPLE_MAX
+
+
+@dataclass(frozen=True, slots=True)
 class MeasureParams:
     """All thresholds. Pass one instance through the pipeline; never read module globals."""
 
@@ -263,6 +377,7 @@ class MeasureParams:
     relationships: RelationshipParams = field(default_factory=RelationshipParams)
     classify: ClassifyParams = field(default_factory=ClassifyParams)
     keyframes: KeyframeParams = field(default_factory=KeyframeParams)
+    continuous: ContinuousParams = field(default_factory=ContinuousParams)
 
 
 DEFAULT_PARAMS = MeasureParams()

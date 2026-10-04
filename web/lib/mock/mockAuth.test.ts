@@ -114,7 +114,7 @@ describe("mock admin", () => {
       ["admin", "alice", "disabled", "newbie", "user"],
     );
     assert.equal(items.find((u) => u.username === "alice")?.job_count, 2);
-    assert.equal(items.find((u) => u.username === "user")?.job_count, 2);
+    assert.equal(items.find((u) => u.username === "user")?.job_count, 3); // + the continuous fixture
     assert.equal(items.find((u) => u.username === "newbie")?.last_login_at, null);
   });
 

@@ -9,20 +9,31 @@
 import type { ApiError, ApiErrorCode } from "./errors";
 import type { InterpreterCheck, InterpreterCheckErrorCode, InterpreterMode, StructuredOutputMode } from "./api";
 import type {
+  AutoplayDirection,
+  Axis,
+  CardScale,
   Confidence,
   ConfidenceBand,
   Direction,
   Easing,
   ElementKind,
+  ElementStatic,
+  InertiaModel,
   InteractionType,
   InterpretationStatus,
   JobStatus,
+  MeasuredColor,
+  MeasuredNumber,
   Pattern,
+  PauseTrigger,
+  PhaseEvidence,
+  PhaseKind,
   Property,
   ReverseTriggerKind,
   Role,
   SegmentId,
   Shadow,
+  SnapKind,
   Stage,
   TriggerKind,
   UserRole,
@@ -152,6 +163,14 @@ export function formatEasing(easing: Easing, options: { withNearest?: boolean } 
   return options.withNearest ? `${base} (close to ${easing.nearest_named})` : base;
 }
 
+/**
+ * Easing as a short name for one-line summaries: the CSS keyword when the fit is one, else the
+ * closest named curve ("close to easeOutQuad"). Use `formatEasing` where the exact curve matters.
+ */
+export function formatEasingName(easing: Easing): string {
+  return easing.keyword ?? `close to ${easing.nearest_named}`;
+}
+
 /** CSS `transition-timing-function` value for a fit (keyword or cubic-bezier). */
 export function easingToCss(easing: Easing): string {
   return easing.keyword ?? formatCubicBezier(easing.cubic_bezier);
@@ -253,12 +272,16 @@ export const INTERACTION_TYPE_LABELS: Record<InteractionType, string> = {
   dropdown: "Dropdown",
   modal: "Modal",
   unknown: "Unknown",
+  continuous: "Continuous motion",
+  drag: "Drag",
 };
 
 export const TRIGGER_LABELS: Record<TriggerKind, string> = {
   pointer_enter: "Pointer enters",
   click: "Click",
   unknown: "Unknown",
+  autoplay: "Autoplay",
+  drag: "Pointer drag",
 };
 
 export const REVERSE_TRIGGER_LABELS: Record<ReverseTriggerKind, string> = {
@@ -272,6 +295,7 @@ export const DIRECTION_LABELS: Record<Direction, string> = {
   forward: "Forward only",
   forward_reverse: "Forward + reverse",
   round_trip: "Round trip",
+  continuous: "Continuous",
 };
 
 export const PATTERN_LABELS: Record<Pattern, string> = {
@@ -281,6 +305,8 @@ export const PATTERN_LABELS: Record<Pattern, string> = {
   accordion: "Accordion",
   modal: "Modal",
   generic: "Generic",
+  marquee: "Marquee",
+  carousel: "Carousel",
 };
 
 export const ELEMENT_KIND_LABELS: Record<ElementKind, string> = {
@@ -291,6 +317,7 @@ export const ELEMENT_KIND_LABELS: Record<ElementKind, string> = {
   backdrop: "Backdrop",
   resize: "Resizes",
   content_change: "Content changes",
+  scroller: "Scrolls continuously",
 };
 
 export const ROLE_LABELS: Record<Role, string> = {
@@ -312,6 +339,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   badge: "Badge",
   accordion_panel: "Accordion panel",
   other: "Element",
+  scroller: "Scroller",
 };
 
 export const INTERPRETATION_STATUS_LABELS: Record<InterpretationStatus, string> = {
@@ -338,7 +366,151 @@ export const WARNING_LABELS: Record<WarningCode, string> = {
   preview_unavailable: "Preview unavailable",
   reverse_not_recorded: "Reverse not recorded",
   frames_subsampled: "Reduced frame rate (long motion)",
+  ambient_motion_masked: "Background motion ignored",
+  extra_scrollers_ignored: "Other scrollers ignored",
+  tracking_degraded: "Tracking less precise",
+  loop_period_not_observed: "Loop length not observed",
 };
+
+/** Continuous mode: one label per velocity-profile phase (PLAN-continuous §4.5). */
+export const PHASE_KIND_LABELS: Record<PhaseKind, string> = {
+  autoplay: "Autoplay",
+  decelerate: "Slows down",
+  paused: "Paused",
+  drag: "Drag",
+  inertia: "Momentum",
+  snap: "Snap",
+  stop: "Abrupt stop",
+  resume: "Resumes",
+  unknown: "Unclear",
+};
+
+/* ---------- continuous mode (PLAN-continuous §6 phrasing, §7) ---------- */
+
+export const AXIS_LABELS: Record<Axis, string> = { x: "Horizontal", y: "Vertical" };
+
+export const AUTOPLAY_DIRECTION_LABELS: Record<AutoplayDirection, string> = {
+  left: "Left",
+  right: "Right",
+  up: "Up",
+  down: "Down",
+};
+
+export const PAUSE_TRIGGER_LABELS: Record<PauseTrigger, string> = {
+  hover: "Pointer hovers",
+  press: "Pointer presses",
+  unknown: "Not visible (hover or press)",
+};
+
+/** Same words as the technical output: a decaying coast vs a fixed-length eased glide. */
+export const INERTIA_MODEL_LABELS: Record<InertiaModel, string> = {
+  exponential: "Exponential decay",
+  tween: "Eased glide (tween)",
+};
+
+export const SNAP_KIND_LABELS: Record<SnapKind, string> = {
+  grid: "Snaps to the card grid",
+  abrupt_ambiguous: "Abrupt stop (snap or pointer stop, ambiguous)",
+};
+
+/** What a phase label is based on (`Phase.evidence`): the "trigger source". */
+export const PHASE_EVIDENCE_LABELS: Record<PhaseEvidence, string> = {
+  velocity: "Motion only",
+  cursor: "Cursor",
+  "velocity+cursor": "Motion + cursor",
+};
+
+/** Direction word for a signed continuous-mode velocity/displacement (`SIGN_CONVENTION`). */
+export function axisDirection(value: number, axis: Axis): AutoplayDirection {
+  if (axis === "x") return value >= 0 ? "right" : "left";
+  return value >= 0 ? "down" : "up";
+}
+
+/**
+ * Speed rounding of the continuous generators: |v| >= 100 px/s → nearest 10, else nearest 1.
+ * Returns the rounded magnitude (always >= 0).
+ */
+export function roundSpeed(pxPerS: number): number {
+  const a = Math.abs(pxPerS);
+  return a >= 100 ? roundTo(a, 10) : roundTo(a, 1);
+}
+
+/** Speed magnitude like the generated text: 39.4 → "≈39 px/s", -1496 → "≈1500 px/s", 0 → "0 px/s". */
+export function formatSpeed(pxPerS: number, options: { approx?: boolean; unit?: boolean } = {}): string {
+  const { approx = true, unit = true } = options;
+  const v = roundSpeed(pxPerS);
+  return `${approx && v !== 0 ? "≈" : ""}${v}${unit ? " px/s" : ""}`;
+}
+
+/** Signed velocity in words: (39, "x") → "≈39 px/s right", (-1500, "y") → "≈1500 px/s up", ~0 → "0 px/s". */
+export function formatVelocity(pxPerS: number, axis: Axis): string {
+  if (roundSpeed(pxPerS) === 0) return "0 px/s";
+  return `${formatSpeed(pxPerS)} ${axisDirection(pxPerS, axis)}`;
+}
+
+/** Two speeds as one range: (39, 0) → "≈39 → 0 px/s" (magnitudes; direction is not shown). */
+export function formatSpeedChange(from: number, to: number): string {
+  return `${formatSpeed(from, { unit: false })} → ${formatSpeed(to, { unit: false })} px/s`;
+}
+
+/** Signed distance in words: (-619.2, "x") → "619px left"; ~0 → "0px". */
+export function formatDistance(px: number, axis: Axis): string {
+  const text = formatPx(Math.abs(px));
+  return text === "0px" ? text : `${text} ${axisDirection(px, axis)}`;
+}
+
+/** Continuous-mode durations like the generated text: 703 → "≈700 ms" (nearest 10 ms). */
+export function formatApproxMs(ms: number): string {
+  return `≈${roundTo(ms, 10)} ms`;
+}
+
+/** Exponential decay constant: 200 → "τ ≈ 200 ms", with no-break spaces so it never wraps apart. */
+export function formatTau(ms: number): string {
+  return `τ\u00a0≈\u00a0${roundTo(ms, 10)}\u00a0ms`;
+}
+
+/**
+ * Position-dependent card scale (P2c) like the generated text:
+ * "×1 at the centre → ≈×1.17 at 261px" (scale at the farthest measured card).
+ */
+export function formatCardScale(cs: Pick<CardScale, "scale_at_reference" | "reference_distance_px">): string {
+  return `×1 at the centre → ≈×${formatScale(cs.scale_at_reference)} at ${formatPx(cs.reference_distance_px)}`;
+}
+
+/* ---------- appearance (PLAN-continuous §13; both modes) ---------- */
+
+/** One measured static value as display text plus its own confidence. */
+export interface AppearanceFact {
+  key: "background_color" | "text_color" | "font_size_px" | "border_radius_px" | "shadow";
+  label: string;
+  value: string;
+  /** Hex colour for a swatch (colour facts only), else null. */
+  swatch: string | null;
+  confidence: Confidence;
+}
+
+/**
+ * The measured appearance of an element (`MotionElement.static`), in display order. Absent
+ * fields (not measured, or 0.1 results) are skipped, so an empty array means "nothing measured".
+ * Font size is a rough estimate (confidence is at most medium).
+ */
+export function appearanceFacts(staticProps: ElementStatic): AppearanceFact[] {
+  const out: AppearanceFact[] = [];
+  const color = (key: "background_color" | "text_color", label: string, c: MeasuredColor | null | undefined) => {
+    if (c) out.push({ key, label, value: formatColor(c.value), swatch: formatColor(c.value), confidence: c.confidence });
+  };
+  const px = (key: "font_size_px" | "border_radius_px", label: string, n: MeasuredNumber | null | undefined) => {
+    if (n) out.push({ key, label, value: formatPx(n.value), swatch: null, confidence: n.confidence });
+  };
+  color("background_color", "Background", staticProps.background_color);
+  color("text_color", "Text color", staticProps.text_color);
+  px("font_size_px", "Font size (approx.)", staticProps.font_size_px);
+  px("border_radius_px", "Radius", staticProps.border_radius_px);
+  if (staticProps.shadow) {
+    out.push({ key: "shadow", label: "Shadow", value: formatShadow(staticProps.shadow.value), swatch: null, confidence: staticProps.shadow.confidence });
+  }
+  return out;
+}
 
 /** Pixel ratio as shown to users: 2 → "2x (Retina)". */
 export function formatPixelRatio(ratio: number): string {
@@ -441,6 +613,14 @@ const ERROR_DESCRIPTIONS: Record<ApiErrorCode, ErrorDescription> = {
     title: "Page motion is not supported",
     message: "Scrolling and page-level transitions are not supported yet.",
     guidance: ["Record a single component interaction (hover, click, dropdown, modal…).", "Keep the page still: no scrolling, no navigation."],
+  },
+  continuous_motion_unsupported: {
+    title: "Continuous motion can't be measured",
+    message: "Part of the page moves from the start, but not as a single horizontal or vertical scroller.",
+    guidance: [
+      "Record a component that rests before you interact.",
+      "Or pause that animation (looping background, rotating or two-axis motion) before recording.",
+    ],
   },
   no_stable_state: {
     title: "The UI is moving from the start",

@@ -9,6 +9,14 @@ rate), and VFR (``mpdecimate`` + ``-fps_mode vfr``: duplicate frames are dropped
 remaining frames keep their original timestamps, like a recorder that only emits on change).
 VFR caps consecutive drops at :data:`VFR_MAX_DROP` so holds still get a frame every ~83 ms
 (as screen recorders do) and the file keeps its duration instead of ending at the last change.
+
+``capture_grid_hz`` (PLAN-continuous P2, the motivating macOS ``.mov``): a recorder whose clock
+is not the page's render clock. The page renders at ``fps``; captures happen on a
+``1 / capture_grid_hz`` grid keeping 3 of every 4 slots (deltas 1, 1, 2 slots: 13.3 / 13.3 /
+26.7 ms at 75 Hz, ≈56 fps on average) and each capture shows the **latest rendered frame**
+while carrying its own (capture) timestamp. Content positions therefore lag their timestamps
+by 0..1 render interval, irregularly — the jitter that inflated per-frame drag speeds in the
+real recording. Two captures of the same render frame are identical (duplicates).
 """
 
 from __future__ import annotations
@@ -44,6 +52,12 @@ class EncodeSpec:
     codec: Literal["h264", "vp9"] = "h264"
     crf: int = 18
     vfr: bool = False
+    capture_grid_hz: float | None = None
+
+    @property
+    def irregular(self) -> bool:
+        """Irregular frame timestamps (mpdecimate VFR or a capture grid)."""
+        return self.vfr or self.capture_grid_hz is not None
 
     @property
     def ext(self) -> str:
@@ -66,19 +80,34 @@ def encoder_available(name: str) -> bool:
     return any(line.split()[1:2] == [name] for line in out.splitlines() if line.strip())
 
 
+#: Capture-grid slot pattern: kept captures n -> slot 4·⌊n/3⌋ + (n mod 3) (3 of every 4 slots).
+GRID_KEEP, GRID_PERIOD = 3, 4
+
+
+def grid_slot(n: int) -> int:
+    return GRID_PERIOD * (n // GRID_KEEP) + n % GRID_KEEP
+
+
 def ffmpeg_args(width: int, height: int, fps: float, spec: EncodeSpec, out: Path) -> list[str]:
     vf = []
+    if spec.capture_grid_hz is not None:
+        g = spec.capture_grid_hz
+        vf.append(f"setpts=({GRID_PERIOD}*floor(N/{GRID_KEEP})+mod(N\\,{GRID_KEEP}))/({g:g}*TB)")
     if spec.vfr:
         vf.append(f"mpdecimate=max={VFR_MAX_DROP}")
     vf.append("scale=out_color_matrix=bt709:out_range=tv,format=yuv420p")
     args = [
         FFMPEG, "-v", "error", "-y",
-        "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{width}x{height}", "-r", f"{fps:g}",
+        "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{width}x{height}",
+        # a capture grid stamps frames in 1 / grid units (setpts above), so TB must be 1 / grid
+        "-r", f"{spec.capture_grid_hz if spec.capture_grid_hz is not None else fps:g}",
         "-i", "-",
         "-vf", ",".join(vf),
     ]  # fmt: skip
     if spec.vfr:
         args += ["-fps_mode", "vfr"]
+    elif spec.capture_grid_hz is not None:
+        args += ["-fps_mode", "passthrough"]
     if spec.codec == "h264":
         args += ["-c:v", "libx264", "-preset", "medium", "-crf", str(spec.crf)]
     elif spec.codec == "vp9":
@@ -102,7 +131,8 @@ def ffmpeg_args(width: int, height: int, fps: float, spec: EncodeSpec, out: Path
 def encode_frames(
     frames: Iterable[np.ndarray], width: int, height: int, fps: float, spec: EncodeSpec, out: Path
 ) -> int:
-    """Pipe BGR ``uint8`` frames of size ``width``×``height`` into ffmpeg. Returns frame count."""
+    """Pipe BGR ``uint8`` frames of size ``width``×``height`` into ffmpeg. Returns the number of
+    rendered frames consumed (with ``capture_grid_hz`` only the captured ones are written)."""
     if spec.codec == "vp9" and not encoder_available("libvpx-vp9"):
         raise RuntimeError("ffmpeg has no libvpx-vp9 encoder")
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -113,11 +143,20 @@ def encode_frames(
     )
     assert proc.stdin is not None
     n = 0
+    grid = spec.capture_grid_hz
+    k = 0  # next capture
     try:
         for f in frames:
             if f.shape != (height, width, 3) or f.dtype != np.uint8:
                 raise ValueError(f"frame {n}: expected {(height, width, 3)} uint8, got {f.shape}")
-            proc.stdin.write(np.ascontiguousarray(f).tobytes())
+            if grid is None:
+                proc.stdin.write(np.ascontiguousarray(f).tobytes())
+            else:
+                # every capture whose time falls before the next render frame shows this one
+                t_next = (n + 1) / fps
+                while grid_slot(k) / grid < t_next - 1e-9:
+                    proc.stdin.write(np.ascontiguousarray(f).tobytes())
+                    k += 1
             n += 1
     except BrokenPipeError:
         pass
@@ -217,7 +256,13 @@ def verify(video: TruthVideo) -> list[str]:
     if p.pix_fmt != "yuv420p":
         problems.append(f"pix_fmt {p.pix_fmt}")
     frame_ms = 1000.0 / video.fps
-    if video.vfr:
+    if video.capture_grid_hz is not None:
+        dt = 1000.0 / video.capture_grid_hz
+        if not p.is_vfr:
+            problems.append(f"expected irregular capture timestamps, dt_cv={p.dt_cv}")
+        if abs(p.duration_ms - video.duration_ms) > 2 * dt + frame_ms + 2:
+            problems.append(f"duration {p.duration_ms}ms != {video.duration_ms}ms")
+    elif video.vfr:
         if not p.is_vfr:
             problems.append(f"expected VFR, dt_cv={p.dt_cv}")
         if p.frame_count >= video.frames_rendered:

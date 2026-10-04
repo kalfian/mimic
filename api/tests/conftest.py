@@ -15,6 +15,7 @@ from app.config import REPO_ROOT, Settings, get_settings
 
 CONTRACT_DIR: Path = REPO_ROOT / "docs" / "contract"
 SAMPLE_RESULT_PATH: Path = CONTRACT_DIR / "sample-result.json"
+SAMPLE_CONTINUOUS_RESULT_PATH: Path = CONTRACT_DIR / "sample-continuous-result.json"
 
 
 #: scrypt cost used by tests (PLAN-auth §9): 2^10 instead of 2^15. Hashes encode their own
@@ -46,6 +47,17 @@ def load_sample_result() -> dict[str, Any]:
 def sample_result() -> dict[str, Any]:
     """The shared ResultEnvelope fixture as a plain dict (fresh copy per test)."""
     return copy.deepcopy(load_sample_result())
+
+
+def load_sample_continuous_result() -> dict[str, Any]:
+    """Fresh copy of ``docs/contract/sample-continuous-result.json`` (continuous mode)."""
+    return json.loads(SAMPLE_CONTINUOUS_RESULT_PATH.read_text(encoding="utf-8"))
+
+
+@pytest.fixture
+def sample_continuous_result() -> dict[str, Any]:
+    """The continuous-mode ResultEnvelope fixture (PLAN-continuous §5.3), fresh copy per test."""
+    return load_sample_continuous_result()
 
 
 @pytest.fixture

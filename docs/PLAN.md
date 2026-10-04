@@ -1227,3 +1227,9 @@ at startup with a backup; every job route needs a session (other users' jobs ans
 `POST /api/interpreter/check` is admin-only; `GET /api/health` returns `interpreter`/`limits`
 only to signed-in callers; `make clean-jobs` keeps accounts and `make reset-data` wipes
 everything. The pipeline, `scripts/analyze.py` and the synth eval don't touch auth.
+
+## Continuous-motion addendum (2026-10-03)
+
+Continuous / looping single-axis scrollers (autoplay, pause, drag, inertia, snap, resume) and IR 0.2 (`mode`, `continuous`, measured appearance) are specified in [`PLAN-continuous.md`](PLAN-continuous.md) (integrated in P2, see its "P2 notes"); the transition pipeline above is unchanged for recordings without motion from the first frame (its IR only gains `mode` and the measured appearance).
+
+**Acceptance (2026-10-04): PASS.** The §14 round-trip acceptance on the motivating recording passed on run 3 (18/18); summary and root causes of runs 1–2 in [`PLAN-continuous.md` → Acceptance result](PLAN-continuous.md#acceptance-result).

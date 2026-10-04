@@ -22,11 +22,17 @@ Merge policy (§7.5):
   transitions. Child transforms are measured relative to the CV parent, so re-parenting under a
   moving element would silently change what the numbers mean.
 * Numbers are never read from the interpreter (D4).
+
+Measured appearance (PLAN-continuous §13, Track A): :func:`apply_appearance` maps an
+``appearance.AppearanceResult`` into the measurement — per-element ``background_color`` /
+``text_color`` / ``font_size_px`` merged into ``Measurement.statics`` and the top-level
+``Measurement.scene`` — so it is persisted with the measurement (re-runs keep it). Without that
+call nothing changes: both stay empty / ``None`` and the IR omits them.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -46,13 +52,17 @@ from app.models.ir import (
     Interaction,
     InteractionType,
     Interpretation,
+    MeasuredColor,
+    MeasuredNumber,
     Meta,
     MotionElement,
     MotionSpec,
     PxValue,
     RatioValue,
+    Scene,
     Segment,
     SegmentId,
+    Size,
     Source,
     SpecWarning,
     TotalDuration,
@@ -61,6 +71,7 @@ from app.models.ir import (
     Value,
 )
 from app.models.measure import (
+    ContinuousMeasurement,
     ElementCandidate,
     FittedTransition,
     HeuristicInteraction,
@@ -68,8 +79,15 @@ from app.models.measure import (
     Rect,
     Scale,
 )
+from app.pipeline.appearance import (
+    FONT_SIZE_CONF_CAP,
+    AppearanceResult,
+    ColorEstimate,
+    FontSizeEstimate,
+)
 from app.pipeline.classify import pattern_for
 from app.pipeline.confidence import confidence as make_confidence
+from app.pipeline.confidence import static_confidence
 from app.pipeline.params import DEFAULT_PARAMS, MeasureParams
 from app.pipeline.relationships import TimedTransition, relationships
 from app.pipeline.timing import normalize_progress, progress_samples
@@ -153,6 +171,13 @@ class Measurement:
     statics: dict[str, ElementStatic] = field(default_factory=dict)
     warnings: list[SpecWarning] = field(default_factory=list)
     timing_resolution_ms: int = 17
+    #: Continuous mode only (PLAN-continuous §4.7); None for transition jobs. Persisted files
+    #: written before this field existed decode with the default (``persist.FORMAT_VERSION`` 1).
+    continuous: ContinuousMeasurement | None = None
+    #: Recorded page context (PLAN-continuous §13), set by :func:`apply_appearance`; None = not
+    #: measured (IR ``scene`` omitted). An IR model, so ``persist`` stores it without changes;
+    #: files written before this field existed decode with the default.
+    scene: Scene | None = None
 
 
 # --------------------------------------------------------------------------------------------
@@ -331,6 +356,86 @@ def interpretation_input(
 
 
 # --------------------------------------------------------------------------------------------
+# Measured appearance (PLAN-continuous §13)
+# --------------------------------------------------------------------------------------------
+
+#: Appearance estimates with a raw score below this are too unreliable to hand to the coding
+#: LLM and are dropped (absent = not measured).
+APPEARANCE_MIN_SCORE = 0.15
+
+
+def _measured_color(
+    est: ColorEstimate | None, prop: str, params: MeasureParams
+) -> MeasuredColor | None:
+    if est is None or est.score < APPEARANCE_MIN_SCORE:
+        return None
+    conf = static_confidence(est.score, prop, params.confidence)
+    return MeasuredColor(value=est.hex, confidence=conf)
+
+
+def _measured_font_size(est: FontSizeEstimate | None) -> MeasuredNumber | None:
+    if est is None or est.score < APPEARANCE_MIN_SCORE or est.px <= 0:
+        return None
+    return MeasuredNumber(
+        value=round(est.px, 1), confidence=make_confidence(est.score, cap=FONT_SIZE_CONF_CAP)
+    )
+
+
+def appearance_statics(
+    statics: Mapping[str, ElementStatic],
+    appearance: AppearanceResult,
+    params: MeasureParams = DEFAULT_PARAMS,
+) -> dict[str, ElementStatic]:
+    """``statics`` with the measured appearance merged in (new dict; inputs untouched).
+
+    Colour confidences use the static colour cap (``cap_color``, 0.85); font size is capped at
+    ``FONT_SIZE_CONF_CAP`` (medium at best). Radius / shadow already present are kept.
+    """
+    out = dict(statics)
+    for eid, ea in appearance.elements.items():
+        bg = _measured_color(ea.background, "background-color", params)
+        fg = _measured_color(ea.text, "color", params)
+        fs = _measured_font_size(ea.font_size)
+        if bg is None and fg is None and fs is None:
+            continue
+        base = out.get(eid, ElementStatic())
+        out[eid] = ElementStatic(
+            border_radius_px=base.border_radius_px,
+            shadow=base.shadow,
+            background_color=bg,
+            text_color=fg,
+            font_size_px=fs,
+        )
+    return out
+
+
+def appearance_scene(appearance: AppearanceResult, params: MeasureParams = DEFAULT_PARAMS) -> Scene:
+    """IR ``Scene``: recorded viewport (CSS px) + page background."""
+    w, h = appearance.viewport_css
+    return Scene(
+        viewport_css=Size(w=round(w, 1), h=round(h, 1)),
+        page_background=_measured_color(appearance.page_background, "background-color", params),
+    )
+
+
+def apply_appearance(
+    m: Measurement, appearance: AppearanceResult, params: MeasureParams = DEFAULT_PARAMS
+) -> None:
+    """Merge measured appearance into ``m`` (``statics`` + ``scene``), in place.
+
+    P2 wiring (``run.measure``, after the statics block)::
+
+        app = measure_appearance(AppearanceImage(st.a, (crop_css.x, crop_css.y), scale.k,
+                                                 st.valid),
+                                 elements_from_candidates(rr.elements), (fw, fh),
+                                 page_image=<full state-A frame, optional>)
+        apply_appearance(m, app, params)
+    """
+    m.statics = appearance_statics(m.statics, appearance, params)
+    m.scene = appearance_scene(appearance, params)
+
+
+# --------------------------------------------------------------------------------------------
 # Merge
 # --------------------------------------------------------------------------------------------
 
@@ -426,7 +531,19 @@ def assemble(
     extra_warnings: Iterable[SpecWarning] = (),
     params: MeasureParams = DEFAULT_PARAMS,
 ) -> MotionSpec:
-    """Build the validated IR (see module docstring for the merge policy)."""
+    """Build the validated IR (see module docstring for the merge policy).
+
+    Continuous measurements (``m.continuous``) are assembled by
+    ``continuous.assemble.assemble_continuous`` (PLAN-continuous §4.7).
+    """
+    if m.continuous is not None:
+        from app.pipeline.continuous.assemble import assemble_continuous
+
+        return assemble_continuous(
+            m, interp, job_id=job_id, filename=filename, generated_at=generated_at,
+            pipeline_version=pipeline_version, use_interpreter=use_interpreter,
+            extra_warnings=extra_warnings, params=params,
+        )  # fmt: skip
     p = m.probe
     parents = merge_parents(m.elements, interp, m.transitions)
 
@@ -603,6 +720,7 @@ def assemble(
             pixel_ratio_source=m.scale.pixel_ratio_source,
             timing_resolution_ms=max(1, m.timing_resolution_ms),
         ),
+        scene=m.scene,
         interaction=interaction,
         elements=elements,
         segments=segments,
@@ -625,8 +743,12 @@ def assemble(
 
 
 __all__ = [
+    "APPEARANCE_MIN_SCORE",
     "Measurement",
     "SegmentWindow",
+    "appearance_scene",
+    "appearance_statics",
+    "apply_appearance",
     "assemble",
     "change_summary",
     "dedupe_warnings",

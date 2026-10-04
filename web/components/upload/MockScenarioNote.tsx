@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
 import {
+  MOCK_CONTINUOUS_SAMPLE_JOB_ID,
   MOCK_INTERPRETER_SCENARIOS,
   MOCK_PIPELINE_FAILURES,
   MOCK_RESULT_SCENARIOS,
@@ -91,6 +92,10 @@ export default function MockScenarioNote() {
           Finished sample without upload:{" "}
           <Link href={`/jobs/${MOCK_SAMPLE_JOB_ID}`} className="focus-ring rounded-sm text-ink underline underline-offset-2">
             /jobs/{MOCK_SAMPLE_JOB_ID.slice(0, 8)}…
+          </Link>{" "}
+          · continuous:{" "}
+          <Link href={`/jobs/${MOCK_CONTINUOUS_SAMPLE_JOB_ID}`} className="focus-ring rounded-sm text-ink underline underline-offset-2">
+            /jobs/{MOCK_CONTINUOUS_SAMPLE_JOB_ID.slice(0, 8)}…
           </Link>
         </p>
       </div>

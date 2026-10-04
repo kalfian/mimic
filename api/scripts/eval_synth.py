@@ -20,6 +20,11 @@ body ``{"error": {"code": ...}}`` (expected for the S12 negatives).
 Suite verdict (§11.4): every scenario passes its per-transition / interaction / relationship
 checks, and the easing family is correct on ≥ 80 % of eligible transitions (aggregate).
 
+PLAN-continuous scenarios (truth ``suite == "continuous"``: C1–C11, N1) are **pending** until P2
+(``tests.synth.evaluate.CONTINUOUS_SUITE_ENABLED``): they are not analysed and do not count
+towards the verdict. ``--include-pending`` runs and judges them anyway (P2 work); ``--oracle``
+always includes them (evaluator self-test).
+
 Exit: 0 all pass, 1 any threshold failed, 2 nothing to evaluate / bad input.
 """
 
@@ -42,6 +47,7 @@ from tests.synth.evaluate import (  # noqa: E402
     compare,
     format_report,
     format_summary,
+    is_pending,
     load_ir,
     oracle_spec,
     summarize,
@@ -93,6 +99,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--ir", type=Path, help="IR / ResultEnvelope / error JSON for --truth")
     ap.add_argument("--oracle", action="store_true", help="evaluate the truth against itself")
     ap.add_argument("--no-run", action="store_true", help="compare existing <name>.ir.json only")
+    ap.add_argument(
+        "--include-pending",
+        action="store_true",
+        help="also run + judge the continuous suite (pending until P2)",
+    )
     ap.add_argument("--jobs", type=int, default=min(4, os.cpu_count() or 1))
     args = ap.parse_args(argv)
 
@@ -108,20 +119,27 @@ def main(argv: list[str] | None = None) -> int:
             if not tp.exists():
                 print(f"missing truth file {tp}", file=sys.stderr)
                 return 2
-        if not args.oracle and not args.no_run and truths:
+        gate = not args.oracle and not args.include_pending
+        pending = [t for t in truths if gate and is_pending(Truth.load(t))]
+        to_run = [t for t in truths if t not in pending]
+        if not args.oracle and not args.no_run and to_run:
             t0 = time.perf_counter()
             with ProcessPoolExecutor(max_workers=max(1, args.jobs)) as ex:
-                for name, dt, status in ex.map(run_one, [str(t) for t in truths]):
+                for name, dt, status in ex.map(run_one, [str(t) for t in to_run]):
                     print(f"analyzed {name:24} {dt:5.1f}s  {status}")
-            print(f"pipeline: {len(truths)} videos in {time.perf_counter() - t0:.1f}s\n")
+            print(f"pipeline: {len(to_run)} videos in {time.perf_counter() - t0:.1f}s\n")
         pairs = [(t, None if args.oracle else _ir_for(t)) for t in truths]
 
-    reports, missing = [], []
+    reports, missing, pending_names = [], [], []
     for tp, ip in pairs:
         if not tp.exists():
             print(f"missing truth file {tp}", file=sys.stderr)
             return 2
         truth = Truth.load(tp)
+        if not args.truth and not args.oracle and not args.include_pending and is_pending(truth):
+            pending_names.append(truth.name)
+            print(f"== {truth.name}: PENDING (continuous suite, judged from P2 on)\n")
+            continue
         if args.oracle:
             if truth.expected_error is not None:
                 spec, code = None, truth.expected_error
@@ -144,7 +162,7 @@ def main(argv: list[str] | None = None) -> int:
             "`--oracle` self-tests the evaluator."
         )
         return 2
-    summary = summarize(reports)
+    summary = summarize(reports, pending=pending_names)
     print(format_summary(summary))
     return 0 if summary.ok else 1
 

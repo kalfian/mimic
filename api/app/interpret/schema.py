@@ -18,10 +18,17 @@ from typing import Any, get_args
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.interpret.base import DESCRIPTION_MAX, LABEL_MAX, STRUCTURE_ITEM_MAX
-from app.models.ir import InteractionType, Role
+from app.models.ir import CONTINUOUS_INTERACTION_TYPES, CONTINUOUS_ROLES, InteractionType, Role
 
-ROLES: tuple[str, ...] = get_args(Role)
-INTERACTION_TYPES: tuple[str, ...] = get_args(InteractionType)
+#: Vocabularies offered to the interpreter. The continuous-only members (``scroller``,
+#: ``continuous``, ``drag``) are left out so Layer B cannot put them into a transition spec (the
+#: IR rejects them there). Continuous jobs use the same schema: the scroller's role and the
+#: interaction type are measured and set in ``payload.sanitize_payload`` (the prompt asks for
+#: ``"container"`` / ``"unknown"`` there), so no per-mode schema is needed.
+ROLES: tuple[str, ...] = tuple(r for r in get_args(Role) if r not in CONTINUOUS_ROLES)
+INTERACTION_TYPES: tuple[str, ...] = tuple(
+    t for t in get_args(InteractionType) if t not in CONTINUOUS_INTERACTION_TYPES
+)
 
 MAX_ELEMENTS = 8
 MAX_STRUCTURE = 12

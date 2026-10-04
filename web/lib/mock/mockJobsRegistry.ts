@@ -24,6 +24,9 @@ export const MOCK_USER_IDS = {
 /** Job id of the contract fixture (`sample-result.json`); seeded as owned by `user`. */
 export const FIXTURE_JOB_ID = "3f2b9c1d8e7a4b6c9d0e1f2a3b4c5d6e";
 
+/** Job id of the continuous contract fixture (`sample-continuous-result.json`); owned by `user`. */
+export const CONTINUOUS_FIXTURE_JOB_ID = "7c41e2a95b0d4f3e8a6c1b2d3e4f5a6b";
+
 export interface MockJobEntry {
   id: string;
   /** null = legacy job from before accounts existed (admin-only, "Legacy" owner). */
@@ -52,6 +55,7 @@ function seedJobs(): MockJobEntry[] {
     createdAt: t(iso),
   }));
   seeded.push({ id: FIXTURE_JOB_ID, ownerId: MOCK_USER_IDS.user, filename: "card-hover.mov", createdAt: t("2026-10-01T09:30:00Z") });
+  seeded.push({ id: CONTINUOUS_FIXTURE_JOB_ID, ownerId: MOCK_USER_IDS.user, filename: "carousel-drag.mov", createdAt: t("2026-10-03T10:00:00Z") });
   return seeded;
 }
 

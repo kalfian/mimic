@@ -1,6 +1,16 @@
 @import "tailwindcss";
 
 /*
+ * Geist Mono has no Greek, and the monospace fallbacks draw τ (the momentum time constant, shown
+ * in every number cell) like a "T". Greek letters alone come from a system sans instead.
+ */
+@font-face {
+  font-family: "Mimic Greek";
+  src: local("Helvetica Neue"), local("Segoe UI"), local("Roboto"), local("Arial");
+  unicode-range: U+0370-03FF;
+}
+
+/*
  * Mimic design tokens.
  *
  * Direction: a measuring instrument. Graphite neutrals, hairline rules instead of shadows,
@@ -97,7 +107,7 @@
   --color-danger-soft: var(--danger-soft);
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
+  --font-mono: "Mimic Greek", var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
 
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1rem;

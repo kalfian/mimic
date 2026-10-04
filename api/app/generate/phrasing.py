@@ -5,6 +5,9 @@ transformed by ``abs``, rounding (the helpers below) or x100 for confidence perc
 Never compute new magnitudes (sums, ratios, percentages of change) in prose.
 
 Rounding is decimal half-up so output never depends on binary float artefacts.
+
+Also home of the measured-appearance helpers (PLAN-continuous §13) and the OUTPUT contract text
+(one self-contained HTML file) shared by the transition and continuous prompts.
 """
 
 from __future__ import annotations
@@ -15,6 +18,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from app.models.ir import (
     UNCERTAIN_BELOW,
+    Box,
     ConfidenceBand,
     Easing,
     MotionElement,
@@ -626,3 +630,86 @@ def pixel_ratio_sentence(spec: MotionSpec) -> str:
     if src.pixel_ratio_source == "auto":
         return f"display scale assumed {src.pixel_ratio}x"
     return f"display scale {src.pixel_ratio}x as set on upload"
+
+
+# --------------------------------------------------------------------------------------------
+# Measured appearance (PLAN-continuous §13) — shared by technical / llm_prompt / css
+# --------------------------------------------------------------------------------------------
+
+
+def has_appearance(spec: MotionSpec) -> bool:
+    """True when any PLAN-continuous §13 appearance value is present (scene or element)."""
+    return spec.scene is not None or any(
+        e.static.background_color is not None
+        or e.static.text_color is not None
+        or e.static.font_size_px is not None
+        for e in spec.elements
+    )
+
+
+def appearance_box(el: MotionElement) -> Box:
+    """State-A box (the measured one); the active box for elements absent in state A."""
+    b = el.bbox_initial
+    return b if b.w > 0 and b.h > 0 else el.bbox_active
+
+
+def parent_offset(spec: MotionSpec, el: MotionElement) -> tuple[float, float, MotionElement | None]:
+    """``(x, y, parent)``: the element's state-A position relative to its parent's box, or to
+    the viewport (``parent=None``) for roots. The only derived magnitude in the appearance
+    text: a difference of two IR boxes (allow-listed by the provenance test)."""
+    b = appearance_box(el)
+    parent = element_map(spec).get(el.parent_id) if el.parent_id is not None else None
+    if parent is None:
+        return b.x, b.y, None
+    pb = appearance_box(parent)
+    return b.x - pb.x, b.y - pb.y, parent
+
+
+def animated_props(spec: MotionSpec, el_id: str) -> set[str]:
+    """Properties the element animates in the main (certain) forward text. Their static value
+    is the transition's ``from`` and is not repeated as a static appearance value."""
+    fwd = forward_segment(spec)
+    return {
+        t.property
+        for t in segment_transitions(spec, fwd.id)
+        if t.element_id == el_id and not is_uncertain(t)
+    }
+
+
+def size_text(b: Box) -> str:
+    """``320 x 400px``."""
+    return f"{num_px(b.w)} x {num_px(b.h)}px"
+
+
+# --------------------------------------------------------------------------------------------
+# OUTPUT contract of the LLM prompts (one self-contained, responsive HTML file), shared by the
+# transition and continuous prompts; ``noun`` is "interaction" / "motion"
+# --------------------------------------------------------------------------------------------
+
+#: Narrowest viewport the HTML must support. Generic layout guidance, not a measurement: the
+#: only number in OUTPUT that does not come from the IR (allow-listed by the provenance tests).
+MIN_VIEWPORT_PX = 320
+
+
+def html_file_sentence(noun: str, *, script_required: bool = False) -> str:
+    """The deliverable; the inline script is mandatory when the motion needs a JS driver."""
+    script = (
+        "one inline <script> (the motion needs it)"
+        if script_required
+        else f"only if the {noun} needs it, one inline <script>"
+    )
+    sep = " " if script_required else ", "
+    return (
+        "Build this as one self-contained, responsive HTML file named index.html: the markup, "
+        f"one <style> block and{sep}{script}. No frameworks, CDNs, external fonts, external "
+        "images or build step; the file must work when opened directly in a browser."
+    )
+
+
+def content_bullet(noun: str) -> str:
+    return (
+        "- Content: build only the structure above, with neutral placeholders instead of real "
+        "images or copy: images as a solid or gradient block with a fixed aspect-ratio, text as "
+        'short role-named or lorem-style text (for example "Title", "Description"), icons as a '
+        f"simple inline SVG. Do not add UI beyond what is needed to demonstrate the {noun}."
+    )

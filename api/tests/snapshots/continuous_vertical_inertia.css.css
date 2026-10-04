@@ -1,0 +1,27 @@
+/* Suggested implementation — estimated from a screen recording, not the original CSS. */
+/* All values are approximate; display scale 2x as set on upload. */
+/* Markup: .news-ticker > .news-ticker__track > the cards repeated twice (two identical copies) for a seamless loop. */
+/* Autoplay, dragging, and momentum need the JS driver (JS tab); these rules are layout only. */
+
+.news-ticker {
+  display: flex;
+  max-width: 320px; /* estimated, medium confidence */
+  height: 600px; /* estimated, medium confidence */
+  margin-inline: auto;
+  overflow: hidden;
+  touch-action: pan-x; /* page scroll stays on the other axis */
+  user-select: none;
+  cursor: grab;
+}
+
+.news-ticker:active {
+  cursor: grabbing;
+}
+
+.news-ticker__track {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  height: max-content;
+  will-change: translate;
+}

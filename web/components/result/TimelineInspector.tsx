@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { AppearanceFactList } from "@/components/result/AppearanceFacts";
 import { ConfidenceBadge } from "@/components/ui/ConfidenceBadge";
 import { LabelSourceTag } from "@/components/ui/LabelSourceTag";
 import {
@@ -12,6 +13,7 @@ import {
   formatScaleChange,
   formatValue,
   SEGMENT_LABELS,
+  type AppearanceFact,
 } from "@/lib/format";
 import type { TimelineRow } from "@/lib/timeline";
 import type { Easing, LabelSource, Transition, Value } from "@/lib/types";
@@ -46,10 +48,13 @@ export function TimelineInspector({
   transition,
   labelSource,
   source,
+  appearance = [],
 }: {
   row: TimelineRow | null;
   transition: Transition | null;
   labelSource: LabelSource | null;
+  /** Measured static appearance of the row's element (empty = nothing measured, nothing shown). */
+  appearance?: AppearanceFact[];
   /** "preview" = hovered or keyboard-focused bar; only a committed selection is announced. */
   source: "preview" | "selected";
 }) {
@@ -127,6 +132,11 @@ export function TimelineInspector({
                   {formatPercent(c.easing)}
                 </span>
               </span>
+            </Fact>
+          ) : null}
+          {appearance.length > 0 ? (
+            <Fact label="Appearance · measured" wide>
+              <AppearanceFactList facts={appearance} className="mt-0.5" />
             </Fact>
           ) : null}
           {row.notes.length > 0 ? (

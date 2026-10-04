@@ -24,6 +24,7 @@ class ErrorCode(StrEnum):
     NO_MOTION_DETECTED = "no_motion_detected"
     UNSUPPORTED_MOTION = "unsupported_motion"
     NO_STABLE_STATE = "no_stable_state"
+    CONTINUOUS_MOTION_UNSUPPORTED = "continuous_motion_unsupported"
     INTERNAL_ERROR = "internal_error"
     INTERRUPTED = "interrupted"
     # routing
@@ -56,6 +57,7 @@ ERROR_HTTP_STATUS: dict[ErrorCode, int] = {
     ErrorCode.NO_MOTION_DETECTED: 422,
     ErrorCode.UNSUPPORTED_MOTION: 422,
     ErrorCode.NO_STABLE_STATE: 422,
+    ErrorCode.CONTINUOUS_MOTION_UNSUPPORTED: 422,
     ErrorCode.INTERNAL_ERROR: 500,
     ErrorCode.INTERRUPTED: 500,
     ErrorCode.NOT_FOUND: 404,
@@ -106,6 +108,12 @@ DEFAULT_MESSAGES: dict[ErrorCode, str] = {
     ErrorCode.NO_STABLE_STATE: (
         "The UI is already moving when the recording starts. Start recording, wait about 1 "
         "second without touching anything, then interact."
+    ),
+    # Callers name the region and the reason (PLAN-continuous §3.5); this is the generic text.
+    ErrorCode.CONTINUOUS_MOTION_UNSUPPORTED: (
+        "Part of the page moves continuously from the start, but not as a single horizontal or "
+        "vertical scroller, so it can't be measured. Record a component that rests before you "
+        "interact, or pause that animation."
     ),
     ErrorCode.INTERNAL_ERROR: (
         "Something went wrong while analyzing the recording. Try again; if it keeps failing, "

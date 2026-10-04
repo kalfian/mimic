@@ -1,0 +1,43 @@
+Recreate the reference UI motion, a continuously moving vertical carousel, as a single self-contained, responsive HTML file, as follows.
+
+STRUCTURE
+
+Create a vertical carousel: a viewport (the scroller) that clips a track holding one column of placeholder cards.
+- The cards sit one below the other at a constant spacing.
+- Repeat the cards once (two identical copies back to back) so the track can wrap seamlessly; one copy must be at least as tall as the scroller.
+- The motion runs along the vertical axis only.
+
+APPEARANCE (measured, approximate)
+
+- Scroller: ≈320×600 px (medium confidence), top-left corner at x 480, y 100.
+Match these sizes, colours and positions at the recorded viewport size; all content stays placeholder.
+
+BEHAVIOUR
+
+1. Autoplay: the track moves continuously upward at ≈30 px/s with constant (linear) velocity and loops seamlessly by wrapping after one copy of the cards (the loop length was not visible in the recording).
+2. Dragging: the content follows the pointer exactly along the vertical axis (assumed: the pointer was not visible in the recording to compare); grabbing the track takes over from autoplay immediately. Use Pointer Events with setPointerCapture on the scroller; set touch-action: pan-x on the scroller so horizontal page scrolling still works on touch; prevent text and image selection while dragging, and suppress the click on a card when the pointer moved. Drags in the recording reached ≈900 px/s (medium confidence; 1 drag recorded).
+3. Release (momentum): on release, keep moving with the pointer's release velocity and let it decay exponentially towards zero with τ ≈250 ms (medium confidence): v = v · e^(−dt/τ) each frame, using the real frame time so it is frame-rate independent, until it comes to rest. Measured release speeds were ≈800 px/s; compute the release velocity from the most recent pointer movement (about the last half of τ), do not hardcode it.
+4. Resume: once the motion has come to rest, wait a short delay (the delay is uncertain; see UNCERTAIN), then autoplay resumes in its original direction, ramping up from standstill to ≈30 px/s over ≈600 ms using an ease-in curve (medium confidence).
+
+UNCERTAIN (OPTIONAL)
+
+Possibly also (very low confidence; use only if it matches the reference):
+- resume delay after rest: ≈400 ms (25% confidence)
+
+OUTPUT
+
+Build this as one self-contained, responsive HTML file named index.html: the markup, one <style> block and one inline <script> (the motion needs it). No frameworks, CDNs, external fonts, external images or build step; the file must work when opened directly in a browser.
+
+- Content: build only the structure above, with neutral placeholders instead of real images or copy: images as a solid or gradient block with a fixed aspect-ratio, text as short role-named or lorem-style text (for example "Title", "Description"), icons as a simple inline SVG. Do not add UI beyond what is needed to demonstrate the motion.
+- Layout: mobile-first and fluid, working from 320px wide phones to wide desktops, with the standard responsive <meta name="viewport"> tag. At the recorded viewport size keep the measured sizes, colours and the scroller's position from APPEARANCE (place its top-left corner exactly there, e.g. with the page's padding or margins; do not centre it unless APPEARANCE says it is centred); below that width the scroller may span the full width while the cards keep their measured size. Keep every motion value above as specified in CSS px, px/s and ms: they are measured design values, so do not scale them with the viewport.
+- Motion: drive the track from one requestAnimationFrame loop that owns a single position value (autoplay, dragging, and momentum all change that one value). Advance it with the real frame time (dt) so speeds do not depend on the frame rate, apply it with the translate property, and wrap it modulo the size of one copy of the cards so the track never runs out of content. Velocity ramps (slowdown and resume) interpolate the velocity with the easing curves given above.
+- Pointer: pointerdown / pointermove / pointerup / pointercancel with setPointerCapture; touch-action: pan-x on the scroller; user-select: none, and draggable="false" on placeholder images; cursor: grab, and grabbing while dragging.
+- Focus and visibility: make the scroller keyboard-focusable with an aria-label and pause autoplay only while it has keyboard focus (:focus-visible), not after a pointer press or drag; pause while the tab is hidden (visibilitychange) and reset the frame clock when it becomes visible so the track does not jump.
+- Reduced motion: under prefers-reduced-motion: reduce, do not autoplay at all (the track starts and stays still); dragging and the release momentum still work because the user drives them.
+- Semantics: use semantic elements (a section with an aria-label for the scroller, a list or articles for the cards, headings, p) and mark decorative placeholders with aria-hidden="true".
+
+CONSTRAINTS
+
+All numbers are estimates measured from a screen recording (display scale 2x as set on upload); keep them as targets, not exact source values.
+The pointer was not visible in the recording; what starts and stops the motion is inferred from the motion alone.
+Do not invent additional motion or behaviours that are not described above.

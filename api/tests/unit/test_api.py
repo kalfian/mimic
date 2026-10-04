@@ -326,7 +326,10 @@ def test_upload_poll_result_video_keyframes(
 def test_real_pipeline_reports_unanalysable_video(
     clips: dict[str, Path], make_client: ClientFactory
 ) -> None:
-    """``testsrc`` has no stable UI states / UI-like motion: a pipeline-time error, not a crash."""
+    """``testsrc`` has no stable UI states / UI-like motion: a pipeline-time error, not a crash.
+
+    Its counter changes from the first frame, so since PLAN-continuous P2 it is ambient motion
+    that is not a scroller (``continuous_motion_unsupported``)."""
     client = make_client()
     job_id = upload(client, clips["ok_mp4"]).json()["id"]
     status = wait_terminal(client, job_id, timeout=60)
@@ -335,6 +338,7 @@ def test_real_pipeline_reports_unanalysable_video(
         "no_motion_detected",
         "unsupported_motion",
         "no_stable_state",
+        "continuous_motion_unsupported",
     }
 
 
@@ -774,6 +778,46 @@ def test_rerun_interpretation_reuses_measurement(
     assert wait_terminal(client, job_id, timeout=60)["options"]["use_interpreter"] is False
     back = ResultEnvelope.model_validate(client.get(f"/api/jobs/{job_id}/result").json())
     assert back.spec.interpretation.status == "disabled"
+
+
+def test_continuous_job_and_rerun(
+    clips: dict[str, Path],
+    make_client: ClientFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """PLAN-continuous P2: a scroller upload yields a continuous result (JS output, phase
+    keyframes) and its interpretation can be re-run from the stored measurement."""
+    from app.pipeline import run as run_mod
+
+    s = _fake_claude(tmp_path, monkeypatch)
+    client = make_client(settings_=s)
+    job_id = upload(client, clips["scroller_mp4"], filename="carousel.mp4").json()["id"]
+    final = JobStatus.model_validate(wait_terminal(client, job_id, timeout=90))
+    assert final.status == "succeeded", final.error
+    first = ResultEnvelope.model_validate(client.get(f"/api/jobs/{job_id}/result").json())
+    assert first.spec.mode == "continuous" and first.spec.continuous is not None
+    assert first.outputs.js is not None
+    kinds = {k.kind for k in first.artifacts.keyframes}
+    assert {"phase", "state_a", "annotated_a"} <= kinds
+    for k in first.artifacts.keyframes:
+        assert client.get(k.url).status_code == 200
+
+    def no_measuring(*a: Any, **k: Any) -> None:
+        raise AssertionError("re-run must not measure again")
+
+    monkeypatch.setattr(run_mod, "measure", no_measuring)
+    assert rerun(client, job_id).status_code == 202
+    again_status = JobStatus.model_validate(wait_terminal(client, job_id, timeout=60))
+    assert again_status.status == "succeeded", again_status.error
+    again = ResultEnvelope.model_validate(client.get(f"/api/jobs/{job_id}/result").json())
+    assert again.spec.mode == "continuous" and again.outputs.js is not None
+    assert again.spec.interpretation.provider == "claude_cli"
+    # the measured numbers are the stored ones
+    assert again.spec.continuous is not None
+    assert again.spec.continuous.phases == first.spec.continuous.phases
+    assert again.spec.continuous.behavior == first.spec.continuous.behavior
+    assert again.spec.interaction.type == first.spec.interaction.type  # heuristic in continuous
 
 
 def _pipeline_with_measurement(ctx: JobContext, reporter: ProgressReporter) -> ResultEnvelope:

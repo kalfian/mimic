@@ -9,12 +9,15 @@
  * Scenario selection (first match wins):
  *   1. `uploadVideo(..., { mockScenario })`
  *   2. page URL `?fail=<error code>` (upload-time or pipeline-time code)
- *   3. page URL `?scenario=<name>` (success | low_confidence | no_preview | forward_only | slow | flaky)
+ *   3. page URL `?scenario=<name>` (success | low_confidence | no_preview | forward_only | slow | flaky
+ *      | continuous | continuous_degraded | continuous_uncertain | continuous_autoplay
+ *      | continuous_vertical | continuous_no_samples | continuous_glide — see continuousVariants.ts)
  * Interpreter status / connection check: page URL `?interpreter=<MockInterpreterScenario>`.
  * Re-run interpretation (`mockRerunInterpretation`): queued → interpreting → generating → succeeded
  * in ~2 s (AI on), then the fixture with the new labels. Kept in memory only (a reload during or
  * after a re-run shows the original result again).
- * Jump straight to a finished result: `/jobs/<fixture job_id>` (MOCK_SAMPLE_JOB_ID).
+ * Jump straight to a finished result: `/jobs/<fixture job_id>` (MOCK_SAMPLE_JOB_ID), or the
+ * continuous fixture `/jobs/<MOCK_CONTINUOUS_SAMPLE_JOB_ID>`.
  *
  * Accounts (PLAN-auth §8.3, see mockAuth.ts): every job route needs a mock session (401 / 403
  * `password_change_required` otherwise). Jobs have owners (mockJobsRegistry.ts): users only see
@@ -52,7 +55,11 @@ import {
   unregisterJob,
 } from "./mockJobsRegistry";
 import { currentSearch, mockLatency, mockTiming, sleep } from "./mockStore";
+import { CONTINUOUS_VARIANTS, continuousResult, isContinuousVariant, MOCK_CONTINUOUS_SAMPLE_JOB_ID } from "./continuousVariants";
 import sampleResultJson from "./sample-result.json";
+
+export { CONTINUOUS_VARIANTS, MOCK_CONTINUOUS_SAMPLE_JOB_ID } from "./continuousVariants";
+export type { ContinuousVariant } from "./continuousVariants";
 
 /* ---------- scenarios ---------- */
 
@@ -71,6 +78,7 @@ export const MOCK_PIPELINE_FAILURES = [
   "no_motion_detected",
   "unsupported_motion",
   "no_stable_state",
+  "continuous_motion_unsupported",
   "internal_error",
   "interrupted",
 ] as const satisfies readonly ErrorCode[];
@@ -83,8 +91,9 @@ export const MOCK_PIPELINE_FAILURES = [
  * - `forward_only`: reverse not recorded (single lane, `reverse_not_recorded` warning)
  * - `slow`: AI labeling stage takes ~25 s (long-running processing state)
  * - `flaky`: every 3rd status poll fails with a network error (exercises backoff / "reconnecting")
+ * - `continuous*`: continuous-mode results (velocity chart states), see continuousVariants.ts
  */
-export const MOCK_RESULT_SCENARIOS = ["success", "low_confidence", "no_preview", "forward_only", "slow", "flaky"] as const;
+export const MOCK_RESULT_SCENARIOS = ["success", "low_confidence", "no_preview", "forward_only", "slow", "flaky", ...CONTINUOUS_VARIANTS] as const;
 
 export type MockUploadFailure = (typeof MOCK_UPLOAD_FAILURES)[number];
 export type MockPipelineFailure = (typeof MOCK_PIPELINE_FAILURES)[number];
@@ -170,6 +179,16 @@ const SAMPLE = sampleResultJson as unknown as ResultEnvelope;
 /** Job id of the fixture: `getJob` reports it as already succeeded. */
 export const MOCK_SAMPLE_JOB_ID: string = SAMPLE.job_id;
 
+/** Fresh copy of the base result for a scenario (continuous variants use their own fixture). */
+function baseResult(scenario: MockScenario): ResultEnvelope {
+  return isContinuousVariant(scenario) ? continuousResult(scenario) : structuredClone(SAMPLE);
+}
+
+/** Source facts reported by `JobStatus.source` for a scenario. */
+function baseSource(scenario: MockScenario): MotionSpec["source"] {
+  return isContinuousVariant(scenario) ? continuousResult(scenario).spec.source : SAMPLE.spec.source;
+}
+
 const PIPELINE_MESSAGES: Record<MockPipelineFailure | MockUploadFailure, { status: number; message: string }> = {
   // Same wording as the backend (api/app/core/errors.py DEFAULT_MESSAGES / probe.py).
   unsupported_format: { status: 415, message: "Unsupported file type. Upload an MP4, MOV, M4V or WebM video." },
@@ -193,6 +212,11 @@ const PIPELINE_MESSAGES: Record<MockPipelineFailure | MockUploadFailure, { statu
     status: 422,
     message: "The UI is already moving when the recording starts. Start recording, wait about 1 second without touching anything, then interact.",
   },
+  continuous_motion_unsupported: {
+    status: 422,
+    message:
+      "Part of the page (around x 260, y 300, 760×200 px) moves continuously from the start, but not as a single horizontal or vertical scroller, so it can't be measured. Record a component that rests before you interact, or pause that animation.",
+  },
   internal_error: { status: 500, message: "Something went wrong while analyzing the recording. Try again; if it keeps failing, try another recording." },
   interrupted: { status: 500, message: "Processing stopped because the server restarted. Upload the video again." },
 };
@@ -202,6 +226,7 @@ const FAILURE_STAGE: Record<MockPipelineFailure, Stage> = {
   no_motion_detected: "scanning",
   unsupported_motion: "scanning",
   no_stable_state: "scanning",
+  continuous_motion_unsupported: "scanning",
   internal_error: "measuring",
   interrupted: "decoding",
 };
@@ -236,14 +261,16 @@ function lookupJob(id: string): MockJob | null {
   if (known) return known;
   const entry = registryEntry(id);
   let job: MockJob | null = null;
-  if (id === MOCK_SAMPLE_JOB_ID) {
+  if (id === MOCK_SAMPLE_JOB_ID || id === MOCK_CONTINUOUS_SAMPLE_JOB_ID) {
+    const continuous = id === MOCK_CONTINUOUS_SAMPLE_JOB_ID;
     job = {
       id,
-      scenario: "success",
-      useInterpreter: true,
+      scenario: continuous ? "continuous" : "success",
+      // The continuous fixture was produced with AI labeling off (heuristic labels).
+      useInterpreter: !continuous,
       pixelRatio: "auto",
       createdAt: entry?.createdAt ?? 0,
-      filename: entry?.filename ?? SAMPLE.spec.source.filename,
+      filename: entry?.filename ?? baseSource(continuous ? "continuous" : "success").filename,
       videoUrl: null,
       polls: 0,
     };
@@ -256,7 +283,7 @@ function lookupJob(id: string): MockJob | null {
         useInterpreter: m[2] === "1",
         pixelRatio: m[3] as PixelRatioOption,
         createdAt: parseInt(m[4], 36),
-        filename: entry?.filename ?? SAMPLE.spec.source.filename,
+        filename: entry?.filename ?? baseSource(m[1]).filename,
         videoUrl: null,
         polls: 0,
       };
@@ -317,7 +344,7 @@ export function mockJobStatusAt(job: Omit<MockJob, "polls" | "videoUrl">, now: n
     options: { pixel_ratio: job.pixelRatio, use_interpreter: job.useInterpreter },
     owner: job.owner ?? null,
   };
-  const src = SAMPLE.spec.source;
+  const src = baseSource(job.scenario);
   const source = { filename: job.filename, width: src.width, height: src.height, fps: src.fps_nominal, duration_s: src.duration_ms / 1000 };
 
   let t = 0;
@@ -365,7 +392,7 @@ export function mockJobStatusAt(job: Omit<MockJob, "polls" | "videoUrl">, now: n
 
 /** Status during / after an interpretation re-run that started at `rerunAt`. */
 function rerunStatusAt(job: Omit<MockJob, "polls" | "videoUrl">, rerunAt: number, now: number): JobStatus {
-  const src = SAMPLE.spec.source;
+  const src = baseSource(job.scenario);
   const base = {
     id: job.id,
     created_at: new Date(job.createdAt).toISOString(),
@@ -522,7 +549,7 @@ const MOCK_VIDEO_URL: string | null = process.env.NEXT_PUBLIC_API_MOCK_VIDEO_URL
 export function buildMockResult(
   job: Pick<MockJob, "id" | "scenario" | "useInterpreter" | "pixelRatio" | "filename" | "videoUrl">,
 ): ResultEnvelope {
-  const result = structuredClone(SAMPLE);
+  const result = baseResult(job.scenario);
   const spec = result.spec;
   result.job_id = job.id;
   spec.job_id = job.id;

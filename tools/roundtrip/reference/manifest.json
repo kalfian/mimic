@@ -1,0 +1,52 @@
+{
+  "about": "Round-trip harness self-check (PLAN-continuous §14): each reference page is written by hand from the synthetic ground truth of `scenario`. expect=pass: every judged compare row must PASS. expect=fail: the compare must FAIL, every row in must_fail must FAIL, and every row in must_pass must still PASS (so the failure is attributed to the right behaviour). known_fail: rows that fail for a documented measurement limitation of the pipeline (not of the reference page); they are reported as known, never as PASS.",
+  "references": [
+    {
+      "html": "c4_carousel_drag_inertia.html",
+      "scenario": "carousel_drag_inertia",
+      "expect": "pass"
+    },
+    {
+      "html": "c3_marquee_hover_pause.html",
+      "scenario": "marquee_hover_pause",
+      "expect": "pass"
+    },
+    {
+      "html": "c8_carousel_drag_snap.html",
+      "scenario": "carousel_drag_snap",
+      "expect": "pass",
+      "known_fail": {
+        "scroller.box": "pipeline region width follows H.264 spill at the viewport edges: the replica PNGs change exactly on x 260-1019 (truth); with the unpadded box (P2e) the CRF-18 source measures 761 px and the encoded replica 763-764 px (it was 765/768/771 px at CRF 14/18/23 with the old 2 px pad); ±2 px is at this noise floor (fix belongs in pipeline/continuous region refinement or the §14 tolerance)"
+      }
+    },
+    {
+      "html": "s2_card_hover_compound.html",
+      "scenario": "card_hover_compound",
+      "expect": "pass",
+      "known_fail": {
+        "fwd e3(text).color duration": "thin-text colour timing is the noisiest transition measurement (source timing confidence 0.60, low band): truth 200 ms, source measures 188 ms, replica 217 ms; each is within PLAN §11.4 of the truth (±20 ms) but their difference (29 ms) exceeds the ±20 ms §14 tolerance, which equals the single-measurement accuracy"
+      }
+    },
+    {
+      "html": "c4_wrong.html",
+      "scenario": "carousel_drag_inertia",
+      "expect": "fail",
+      "must_fail": [
+        "phase sequence",
+        "autoplay.speed",
+        "inertia.tau",
+        "resume.delay",
+        "resume.ramp"
+      ],
+      "must_pass": [
+        "mode",
+        "axis",
+        "autoplay.direction",
+        "inertia.mode",
+        "snap.presence",
+        "card.size",
+        "pitch"
+      ]
+    }
+  ]
+}

@@ -1,9 +1,85 @@
-"""Technical description (PRD §18, PLAN §9.2). Pure template over the IR."""
+"""Technical description (PRD §18, PLAN §9.2). Pure template over the IR.
+
+Measured appearance (PLAN-continuous §13): when the spec carries ``scene`` or any element
+``background_color`` / ``text_color`` / ``font_size_px``, an APPEARANCE section follows
+INTERACTION (and the per-element static radius / shadow lines move into it). Without those
+fields the output is unchanged. The ``has_appearance`` / ``appearance_box`` / ``parent_offset`` /
+``animated_props`` / ``size_text`` helpers live in ``phrasing`` (shared with ``llm_prompt`` and
+``css``); the names stay importable from here.
+"""
 
 from __future__ import annotations
 
 from app.generate import phrasing as ph
-from app.models.ir import MotionSpec, Transition, band_for
+from app.models.ir import (
+    MeasuredColor,
+    MeasuredNumber,
+    MotionSpec,
+    Transition,
+    band_for,
+)
+
+# Measured appearance helpers: live in ``phrasing`` (shared with llm_prompt / css)
+has_appearance = ph.has_appearance
+appearance_box = ph.appearance_box
+parent_offset = ph.parent_offset
+animated_props = ph.animated_props
+size_text = ph.size_text
+
+
+def _measured_line(label: str, value: str, conf_value: float) -> str:
+    band = band_for(conf_value)
+    return f"  {label}: {ph.value_prefix(band)}{value} — {ph.confidence_clause(conf_value)}"
+
+
+def _color_line(label: str, c: MeasuredColor) -> str:
+    return _measured_line(label, c.value, c.confidence.value)
+
+
+def _number_line(label: str, n: MeasuredNumber) -> str:
+    return _measured_line(label, ph.px(n.value), n.confidence.value)
+
+
+def _appearance(spec: MotionSpec) -> list[str]:
+    lines = ["APPEARANCE (initial state, measured)", ""]
+    if spec.scene is not None:
+        sc = spec.scene
+        lines.append(
+            f"Viewport: {ph.num_px(sc.viewport_css.w)} x {ph.num_px(sc.viewport_css.h)}px "
+            "(recorded frame, CSS px)"
+        )
+        if sc.page_background is not None:
+            pb = sc.page_background
+            lines.append(
+                f"Page background: {ph.value_prefix(pb.confidence.band)}{pb.value} — "
+                f"{ph.confidence_clause(pb.confidence.value)}"
+            )
+        lines.append("")
+    for el in ph.element_order(spec):
+        x, y, parent = parent_offset(spec, el)
+        where = (
+            "in the viewport"
+            if parent is None
+            else f"inside {ph.display_label(parent)} ({parent.id})"
+        )
+        lines.append(
+            f"{ph.display_label(el)} ({el.id}): {size_text(appearance_box(el))} at "
+            f"x {ph.px(x)}, y {ph.px(y)} {where}"
+        )
+        animated = animated_props(spec, el.id)
+        st = el.static
+        if st.background_color is not None and "background-color" not in animated:
+            lines.append(_color_line("Background", st.background_color))
+        if st.text_color is not None and "color" not in animated:
+            lines.append(_color_line("Text color", st.text_color))
+        if st.font_size_px is not None:
+            lines.append(_number_line("Font size", st.font_size_px))
+        if st.border_radius_px is not None and "border-radius" not in animated:
+            lines.append(_number_line("Border radius", st.border_radius_px))
+        if st.shadow is not None and "box-shadow" not in animated:
+            sh = st.shadow
+            lines.append(_measured_line("Shadow", ph.shadow_css(sh.value), sh.confidence.value))
+    return lines
 
 
 def _value_line(t: Transition, label: str, side: str) -> str:
@@ -184,6 +260,9 @@ def render(spec: MotionSpec) -> str:
     active_label = ph.ACTIVE_LABEL[spec.interaction.type]
     fwd = ph.forward_segment(spec)
     out: list[str] = _interaction(spec)
+    appearance = has_appearance(spec)
+    if appearance:
+        out += ["", *_appearance(spec)]
 
     for el in ph.element_order(spec):
         ts = [
@@ -201,7 +280,8 @@ def render(spec: MotionSpec) -> str:
                 f"; inside {ph.display_label(ph.element_map(spec)[el.parent_id])} ({el.parent_id})"
             )
         out.append(meta)
-        out += _static_lines(spec, el.id, {t.property for t in ordered})
+        if not appearance:  # otherwise listed under APPEARANCE
+            out += _static_lines(spec, el.id, {t.property for t in ordered})
         for t in ordered:
             out.append("")
             out += _property_block(t, active_label)

@@ -5,6 +5,11 @@
 * Forward timing lives in the active-state rule, reverse timing in the base rule (CSS uses the
   transition of the destination state).
 * Uncertain transitions (``overall < 0.3``) are emitted as comments, never as rules.
+* Measured appearance (PLAN-continuous §13), only when the spec carries it: a ``body`` rule with
+  the page background, and base rules gain ``width`` / ``height`` (non-text elements, from the
+  state-A box), ``background-color``, ``color``, ``font-size`` next to the static radius /
+  shadow. Elements without transitions then get a base rule too. Without appearance values the
+  output is unchanged.
 """
 
 from __future__ import annotations
@@ -12,7 +17,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from app.generate import phrasing as ph
-from app.models.ir import MotionElement, MotionSpec, Transition
+from app.generate.phrasing import appearance_box, has_appearance
+from app.models.ir import MeasuredColor, MotionElement, MotionSpec, Transition
 
 HEADER = "/* Suggested implementation — estimated from a screen recording, not the original CSS. */"
 
@@ -171,8 +177,35 @@ def _selectors(spec: MotionSpec, names: dict[str, str]) -> dict[str, str]:
     return out
 
 
-def _static_decls(el: MotionElement, animated: set[str]) -> list[str]:
+def _estimated(band: str) -> str:
+    return f"/* estimated, {band} confidence */"
+
+
+def _color_decl(prop: str, c: MeasuredColor) -> str:
+    return f"  {prop}: {c.value}; {_estimated(c.confidence.band)}"
+
+
+def _appearance_decls(el: MotionElement, animated: set[str]) -> list[str]:
+    """Measured size / colours / font size (only called when the spec has appearance)."""
     out = []
+    st = el.static
+    if not el.text_like:  # a text box's size follows its (placeholder) text
+        b = appearance_box(el)
+        out.append(f"  width: {ph.css_px(b.w)};")
+        if "height" not in animated:
+            out.append(f"  height: {ph.css_px(b.h)};")
+    if st.background_color is not None and "background-color" not in animated:
+        out.append(_color_decl("background-color", st.background_color))
+    if st.text_color is not None and "color" not in animated:
+        out.append(_color_decl("color", st.text_color))
+    if st.font_size_px is not None:
+        fs = st.font_size_px
+        out.append(f"  font-size: {ph.css_px(fs.value)}; {_estimated(fs.confidence.band)}")
+    return out
+
+
+def _static_decls(el: MotionElement, animated: set[str], appearance: bool = False) -> list[str]:
+    out = _appearance_decls(el, animated) if appearance else []
     r = el.static.border_radius_px
     if r is not None and "border-radius" not in animated:
         out.append(
@@ -200,7 +233,19 @@ def _header(spec: MotionSpec, names: dict[str, str]) -> list[str]:
         lines.append("/* Trigger could not be determined; implemented as hover. */")
     if ph.reverse_segment(spec) is None:
         lines.append("/* Reverse not recorded: base rules reuse the forward timings. */")
+    if spec.scene is not None:
+        vw = spec.scene.viewport_css
+        lines.append(
+            f"/* Sizes and colors measured at the recorded {ph.num_px(vw.w)} x "
+            f"{ph.num_px(vw.h)}px viewport. */"
+        )
     return lines
+
+
+def _page_rule(spec: MotionSpec) -> list[str]:
+    if spec.scene is None or spec.scene.page_background is None:
+        return []
+    return [_Rule("body", [_color_decl("background-color", spec.scene.page_background)]).text()]
 
 
 def render(spec: MotionSpec) -> str:
@@ -209,6 +254,8 @@ def render(spec: MotionSpec) -> str:
     fwd = ph.forward_segment(spec)
     rev = ph.reverse_segment(spec)
     blocks: list[str] = ["\n".join(_header(spec, names))]
+    appearance = has_appearance(spec)
+    blocks += _page_rule(spec)
 
     for el in ph.element_order(spec):
         f_all = [t for t in ph.segment_transitions(spec, fwd.id) if t.element_id == el.id]
@@ -218,6 +265,10 @@ def render(spec: MotionSpec) -> str:
             else []
         )
         if not f_all and not r_all:
+            if appearance:  # static element: measured appearance only
+                static = _static_decls(el, set(), appearance=True)
+                if static:
+                    blocks.append(_Rule(f".{names[el.id]}", static).text())
             continue
         order = lambda t: ph.PROPERTY_ORDER.index(t.property)  # noqa: E731
         f_main = sorted((t for t in f_all if not ph.is_uncertain(t)), key=order)
@@ -239,7 +290,7 @@ def render(spec: MotionSpec) -> str:
         origin = next((t.transform_origin for t in f_main if t.transform_origin), None)
         if origin is not None:
             base.lines.append(f"  transform-origin: {origin};")
-        base.lines += _static_decls(el, {t.property for t in f_main})
+        base.lines += _static_decls(el, {t.property for t in f_main}, appearance)
         base.lines += _state_values(
             [t for t in f_main if not ph.is_identity(t.property, t.from_)], "from"
         )

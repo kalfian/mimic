@@ -1,6 +1,7 @@
 """Render the synthetic scenario suite (PLAN §11.2–11.3, Track S).
 
-For every scenario S1–S12 (incl. S10/S11 variants) this writes into ``data/synth/``:
+For every scenario S1–S12 (incl. S10/S11 variants) and the PLAN-continuous scenarios C1–C11,
+N1 this writes into ``data/synth/``:
 
 * ``<name>.<mp4|mov|webm>`` — the encoded recording,
 * ``<name>.truth.json``     — ground truth (``tests/synth/truth.py``) incl. ffprobe facts,
@@ -65,7 +66,9 @@ def render_one(name: str, out_dir: str) -> dict:
         "truth": truth_path.name,
         "expected_error": truth.expected_error,
         "interaction": truth.interaction.type if truth.interaction else None,
+        "suite": truth.suite,
         "transitions": len(truth.transitions),
+        "phases": len(truth.continuous.phases) if truth.continuous else 0,
         "codec": p.codec_name,
         "size": f"{p.width}x{p.height}",
         "fps": p.avg_fps,
@@ -120,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"FAILED {n}: {exc}", file=sys.stderr)
 
     hdr = f"{'scenario':4} {'name':24} {'codec':5} {'size':9} {'fps':>6} {'frames':>6} " \
-          f"{'dur_ms':>6} {'vfr':5} {'tr':>3} {'sec':>5}  check"  # fmt: skip
+          f"{'dur_ms':>6} {'vfr':5} {'tr':>3} {'ph':>3} {'sec':>5}  check"  # fmt: skip
     print(hdr)
     print("-" * len(hdr))
     for r in rows:
@@ -128,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"{r['scenario']:4} {r['name']:24} {r['codec']:5} {r['size']:9} {r['fps']:>6g} "
             f"{r['frames']:>6} {r['duration_ms']:>6} {str(r['vfr']):5} {r['transitions']:>3} "
-            f"{r['seconds']:>5}  {status}"
+            f"{r['phases']:>3} {r['seconds']:>5}  {status}"
         )
         if r["problems"]:
             failed.append(r["name"])

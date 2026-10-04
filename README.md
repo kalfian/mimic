@@ -1,19 +1,22 @@
 # mimic
 
 Mimic takes a short screen recording of a single UI interaction (hover, click, dropdown, modal,
-accordion, ...) and gives you a motion spec: what moved, by how much, when, and with which
-easing. The numbers come from measuring the video's pixels with OpenCV, so they are estimates,
-not the original CSS. Optional AI labeling names the elements. The result comes in four
-formats: an **LLM prompt** you can paste into a coding agent, a technical spec, the JSON spec
-(called the IR, Mimic's intermediate representation) and suggested CSS. Access needs an
-account: an admin creates users, and each user sees only their own jobs.
+accordion, ...) or of a **continuously moving scroller** (an auto-scrolling marquee or carousel
+that can be paused, dragged, flung and that resumes) and gives you a motion spec: what moved, by
+how much, when, and with which easing or velocity profile, plus the measured sizes, positions
+and colours. The numbers come from measuring the video's pixels with OpenCV, so they are
+estimates, not the original CSS. Optional AI labeling names the elements. The result comes in
+four formats: an **LLM prompt** you can paste into a coding agent, a technical spec, the JSON
+spec (called the IR, Mimic's intermediate representation) and suggested CSS. Scrollers get a
+fifth, a suggested **JS** driver. Access needs an account: an admin creates users, and each user
+sees only their own jobs.
 
 ![Result page: video preview, detected interaction, motion timeline](docs/screenshots/result.png)
 
 Contents: [Prerequisites](#prerequisites) · [Setup](#setup) · [Run](#run) ·
 [Accounts](#first-admin-and-user-management) · [How to use](#how-to-use) ·
 [AI labeling](#ai-labeling-optional) · [CLI](#cli-analysis-without-the-server) ·
-[Tests & eval](#tests-and-synthetic-evaluation) · [Make targets](#make-targets) · [HTTP API](#http-api) ·
+[Tests & eval](#tests-and-synthetic-evaluation) · [Round trip](#round-trip-check) · [Make targets](#make-targets) · [HTTP API](#http-api) ·
 [Debugging](#debugging-mimic_debug) · [Troubleshooting](#troubleshooting) ·
 [Architecture](#architecture) · [Limitations](#known-limitations)
 
@@ -230,6 +233,48 @@ Screen Recording). Under Options, turn on "Show Mouse Clicks", and trim the clip
 (Cmd + T) if it runs longer than 15 s. A Retina capture gives a large video, for example
 2880 × 1800. Upload it as **2x** (see below).
 
+#### Supported motion
+
+- **Transitions** (state A → state B, optionally back): hover, press, click/toggle, dropdown,
+  modal, accordion, staggered lists. Mimic needs a still start: the page rests, then one
+  interaction happens.
+- **Continuous scrollers** (one horizontal or vertical strip that moves from the very first
+  frame). Mimic detects this automatically (there is no option to set) and measures:
+  - **autoplay** speed and direction, and the loop length when the content repeats;
+  - **pause** on press or hover, abrupt or with a slowdown;
+  - **drag** along the axis, with its speeds; the outputs make the content follow the pointer
+    1:1 (see [limitations](#known-limitations));
+  - **momentum** after a fling: an exponential decay with time constant τ that either comes to
+    rest or blends back into the autoplay speed (or an eased glide). Letting go without a fling
+    (pointer already still) is told apart from momentum;
+  - **snap** to the card grid;
+  - **resume**: the delay after the motion comes to rest and the ramp back to autoplay speed;
+  - **position-dependent card scaling**: cards that grow with their distance from the scroller
+    centre (scale 1 at the centre, quadratic towards the edges) while keeping their gaps;
+  - card size, gap and pitch, and the scroller's position and colours.
+
+  The result shows a velocity chart with the phases instead of the transition timeline, and the
+  outputs gain a **JS** tab with a requestAnimationFrame driver.
+- **Ambient motion masking.** If something keeps moving from the first frame (a marquee, a
+  looping animation) next to the component you interact with, Mimic masks that region and
+  analyses the transition on its own (note `ambient_motion_masked`).
+- Not supported: page scrolling, two-axis panning, rotating / 3D carousels, more than one
+  analysed scroller, spring parameters (only an "overshoot" flag), element animations inside a
+  moving scroller. Content moving from the first frame that is not a single-axis scroller is
+  reported as `continuous_motion_unsupported`.
+
+**Recording tips for carousels and marquees.**
+
+1. **Show the pointer.** Keep the cursor visible and turn on **"Show Mouse Clicks"** (macOS).
+   Without it Mimic still measures the motion, but has to infer the triggers (hover vs press).
+2. Record at **60 fps**, with the whole scroller on screen. Don't scroll the page.
+3. Start with a **lead of plain autoplay**: let it run for at least 1–2 s before you touch the
+   scroller. The autoplay speed and the scroller's layout are measured from that lead.
+4. Include **at least one drag**: grab, drag, and let go with a flick so the momentum shows.
+   Let it come to rest.
+5. Record the **resume**: keep the pointer off the scroller until autoplay is back at full speed
+   for a second or two. The whole clip still has to fit in 15 s.
+
 ### 2. Upload and choose options
 
 ![Upload page](docs/screenshots/upload.png)
@@ -288,6 +333,31 @@ breakdown (value / timing / easing).
 Under the timeline are the **keyframes** (A · start, 25 / 50 / 75 %, B · end, with optional
 element boxes) and before/after crops of each changed element.
 
+#### Continuous scrollers
+
+![Result page for a carousel: video, detected behaviour with measured appearance, velocity profile](docs/screenshots/continuous-result.png)
+
+For a scroller the result page looks different (the screenshots use the synthetic C4 carousel
+`carousel_drag_inertia.mp4` from `make synth`):
+
+- **Detected behaviour** lists the pattern (marquee, carousel), the scroller with its size and
+  card spacing, then one row per behaviour: autoplay, loop, pause, drag, momentum, snap, resume
+  and the trigger source (motion + cursor, or motion only). Each row has its confidence and
+  the times where it happened; clicking a time moves the video there. **Appearance · measured**
+  below it lists the page, scroller, card and text colours, sizes and an approximate font size
+  (`?` marks low confidence).
+- **Velocity profile:** the measured speed over time (right/down above zero, left/up below), the
+  autoplay speed as a dashed line, and markers for pointer enter / leave, release, rest and
+  resume. **Compressed** (default) is a log scale (equal steps are ×10) so a slow autoplay and a
+  fast drag both stay readable; **Linear** shows true proportions; **Table** lists the same
+  phases with their values.
+- The **phase strip** above the chart works like the timeline: click a phase, or use ← / → and
+  **Enter**, to select it and move the video to its start. The inspector shows its duration,
+  velocities, distance, the fitted model (constant speed, exponential decay with τ, ease of a
+  ramp) drawn against the measured points, and its confidence.
+
+![Velocity profile with the first momentum phase selected and its exponential fit](docs/screenshots/velocity-phase.png)
+
 ### 5. Copy the output
 
 ![Motion specification tabs, LLM Prompt selected](docs/screenshots/spec-llm-prompt.png)
@@ -300,6 +370,7 @@ element boxes) and before/after crops of each changed element.
 | Technical | A readable spec for a developer |
 | JSON | The motion IR (schema 0.1, no per-frame samples) |
 | CSS | A suggested implementation. The original site may have used other CSS, JS or an animation library |
+| JS (scrollers only) | A suggested requestAnimationFrame driver for the scroller: autoplay, pause, drag with pointer capture, momentum, snap, resume ramp and card scaling, with every measured value as a named constant. The site may have used a carousel library instead |
 
 The LLM prompt asks for **one self-contained, responsive `index.html`** (HTML, a `<style>` block,
 inline script only if needed; no frameworks, CDNs or external assets). It builds the detected
@@ -308,6 +379,22 @@ recording's real images or copy. The layout reflows from 320 px phones to wide d
 the measured motion values stay as given in px and ms. It also asks for hover styles behind
 `@media (hover: hover)` with focus and tap fallbacks (click and press use a real `<button>`)
 and a `prefers-reduced-motion` variant.
+
+**APPEARANCE block.** After STRUCTURE, the prompt has an **APPEARANCE (measured, approximate)**
+block: the recorded viewport and page background, each element's size and position (for a
+scroller: its top-left corner in the recorded viewport, card size, gap, card and scroller
+backgrounds), text colour, radius, shadow and an approximate font size. Each value is hedged by
+its confidence. The builder is asked to match these at the recorded viewport size; content stays
+placeholder. Fonts, real images and text can't be recovered, so expect "visually close", not
+pixel-identical.
+
+![LLM prompt scrolled to the APPEARANCE block of the synthetic carousel](docs/screenshots/spec-appearance.png)
+
+For scrollers, the prompt's BEHAVIOUR section describes each measured behaviour as a rule with its
+numbers (autoplay, pause trigger, drag, release and momentum law, snap, resume, card scaling),
+and the **JS** tab gives the same behaviour as code:
+
+![JS tab: the suggested scroller driver with the measured constants](docs/screenshots/spec-js.png)
 
 ### 6. Add AI labels afterwards
 
@@ -398,7 +485,8 @@ and adds a warning. Tokens are never logged, sent to the browser or written to j
 ```bash
 cd api
 uv run python scripts/analyze.py rec.mov --pixel-ratio 2               # summary + stage timings
-uv run python scripts/analyze.py rec.mp4 --print llm_prompt            # one output: technical|llm_prompt|css|json|ir
+uv run python scripts/analyze.py rec.mp4 --print llm_prompt            # one output: technical|llm_prompt|css|js|json|ir
+uv run python scripts/analyze.py rec.mov --no-keyframes               # numbers only: no frame images written (continuous: phase table)
 uv run python scripts/analyze.py rec.mp4 --out result.json --keyframes kf/ --debug dbg/
 uv run python scripts/analyze.py rec.mp4 --use-interpreter             # AI labels (needs MIMIC_INTERPRETER)
 ```
@@ -411,20 +499,87 @@ If the recording can't be analysed, the script prints the API error
 
 ```bash
 make test         # api: pytest (synth + claude_live markers excluded) · web: typecheck + lint + unit tests
-make synth        # render 17 synthetic scenario videos + ground truth into data/synth (~35 s)
-make eval         # run the pipeline on data/synth, write <name>.ir.json, check PLAN §11.4 thresholds
-make calibrate    # Monte Carlo check that confidence bands are earned (high ≥ 90 % within target)
+make synth        # render 32 synthetic scenario videos + ground truth into data/synth (~2 min)
+make eval         # run the pipeline on data/synth, write <name>.ir.json, check PLAN §11.4 / continuous §8.4 targets
+make calibrate    # Monte Carlo check that confidence bands are earned (high ≥ 90 % within target), transitions + scrollers
 cd api && uv run pytest -m synth   # the same accuracy assertions as pytest
 ```
 
 The synthetic suite covers card hover (with 30 fps / VFR / crf 28 / Retina / MOV / WebM /
 no-cursor variants), button colour and press, dropdown, modal, accordion, stagger, and scroll and
-static negatives. `make eval` prints `SUITE: PASS` only if every threshold holds: values,
+static negatives (17 transition scenarios), plus 15 continuous ones (PLAN-continuous §8.2):
+marquees (looping, hover pause, vertical ticker), carousels with drag + momentum (no cursor,
+30 fps, VFR, a 75 Hz recorder clock like macOS captures), snap, a fast fling at crf 28, a hover
+card next to a marquee (masked), flat placeholder cards with a drag that stops while pressed and
+an unsupported ambient animation. `make eval` prints `SUITE: PASS` only if every threshold holds: values,
 start/duration, easing family ≥ 80 %, interaction type, relationships and confidence bands.
 
 **Contract workflow.** `api/app/models/ir.py` and `api/app/api/schemas.py` are the source of
 truth. After you change them, run `make contract`. Never edit `web/lib/types.ts` by hand. After
 editing `docs/contract/sample-result.json`, run `pnpm -C web sync:fixture`.
+
+## Round-trip check
+
+Does an `index.html` built from Mimic's prompt behave like the recording? The round-trip harness
+(PLAN-continuous §14) replays the recorded interaction on the page, records it, analyses that
+replica video with the same pipeline and compares the two IRs.
+
+```bash
+cd api && uv run python scripts/analyze.py recording.mov --out /tmp/source.json --no-keyframes
+make roundtrip HTML=/path/to/index.html IR=/tmp/source.json [OUT=/tmp/rt]   # prints a pass/fail table
+make roundtrip                                                              # self-check on synthetic truth (~3 min)
+```
+
+- **Replay.** Viewport and pixel ratio come from the source IR. Continuous: the pointer waits
+  outside the scroller, enters and presses on the same frame at each measured drag start, drags
+  along the axis so the content covers the measured distance and is released at the measured
+  release speed, then leaves; hover pauses are replayed as enter/leave. A drag that ends at rest
+  (the pointer stopped before letting go) replays the content's own measured path, then stays
+  pressed and still through a following rest (into the next drag as one press, or for 150 ms
+  before letting go without velocity). Transition: hover / click / press on the measured target
+  box at the measured trigger times.
+- **Capture** (`tools/roundtrip/capture.mjs`, Node built-ins only): headless Chrome
+  (Playwright's `chrome-headless-shell`, or `MIMIC_CHROME=/path/to/chrome`) on its own free
+  DevTools port and a throw-away profile. Capture is deterministic: virtual time advances one
+  frame (1/60 s) at a time, and `requestAnimationFrame`, CSS animations/transitions and event
+  timestamps all follow that clock. `--capture screencast` is a real-time fallback.
+- **Compare** (`scripts/compare_roundtrip.py SOURCE REPLICA`). Continuous: same phase sequence,
+  autoplay ±5 % and same direction, inertia τ ±20 % and mode, resume delay and rest durations
+  ±100 ms, resume ramp / pause slowdown by the time they take to reach 90 % of their speed change
+  (±100 ms), snap presence, scroller/card/pitch/gap ±2 px, card scaling ±0.03 at the source's
+  reference distance (scaling on one side only fails; card size and pitch are then not compared),
+  colours ΔE ≤ 5. Transition: same
+  segments, duration ±max(20 ms, 10 %), values per PLAN §11.4, same easing family. Anything
+  the source didn't measure shows `n/a`, never `PASS`.
+- Output (default `/tmp/mimic-roundtrip/…`): `plan.json`, `frames/`, `replica.mp4`,
+  `replica.ir.json`, `compare.json`. Exit code 0 = PASS, 1 = FAIL.
+- Text and images may differ from the recording; only layout, colours, motion and flow are
+  compared. Element boxes and colours are measured from video on both sides, so they carry
+  codec noise. The scroller box is about ±3 px depending on encoder quality, which is close to
+  the ±2 px tolerance. Flat placeholder cards that also scale with their position track ≈3–4 %
+  slow (the tracker follows the few, mostly central features), inside the ±5 % autoplay
+  tolerance but worth knowing.
+
+**Acceptance procedure** (how a recording is checked end to end):
+
+1. Analyse the recording: `uv run python scripts/analyze.py recording.mov --out /tmp/source.json
+   --no-keyframes`, and take its LLM prompt (`--print llm_prompt`, or **Copy LLM prompt** in the
+   UI).
+2. Give **only the prompt** to an independent coding LLM (no video, no keyframes, no IR) and let
+   it write `index.html`. Don't hand-edit the result: if a row fails, fix Mimic (measurement or
+   prompt) and rebuild the page from the new prompt.
+3. `make roundtrip HTML=index.html IR=/tmp/source.json` and read the table.
+
+**Result on a real recording** (an auto-scrolling carousel with drags, recorded on screen):
+**PASS, 18/18 rows** on the third run. Same phase sequence; autoplay
+35.3 vs 33.9 px/s; momentum τ 258 vs 260 ms, decaying towards the autoplay speed; resume delay
+195 vs 197 ms and ramp 815 vs 841 ms; scroller 740×182 at (93, 307) vs 741×182 at (92, 307);
+card 162.8×147.2 vs 162.7×146.8 px; pitch 167.8 vs 168 px; gap 5.1 vs 5.3 px; card scale ×1.169
+vs ×1.170 at 261 px from the centre; colours ΔE 0.3 (source vs replica). The first two runs
+failed (9/16, then 11/17): Mimic modelled every release as momentum blending into autoplay and
+mis-measured the replica's geometry, then the prompt let the builder scale off-screen cards
+without bound. Both were fixed in Mimic; details in
+[`docs/PLAN-continuous.md`](docs/PLAN-continuous.md#acceptance-result).
 
 ## Make targets
 
@@ -438,6 +593,7 @@ editing `docs/contract/sample-result.json`, run `pnpm -C web sync:fixture`.
 | `make lint` | `ruff check` + `ruff format --check` + ESLint |
 | `make contract` / `make contract-check` | Regenerate / verify `docs/contract/motion-spec.schema.json` + `web/lib/types.ts` |
 | `make synth` / `make eval` / `make calibrate` | Synthetic videos / accuracy suite / confidence calibration |
+| `make roundtrip [HTML=… IR=… OUT=…]` | Round-trip check of a replica page against a source IR; without arguments, the harness self-check on synthetic truth |
 | `make create-admin` | Create an admin; the first one takes over existing jobs. `USER=<name>`, `PASSWORD_STDIN=1` |
 | `make reset-password USER=<name>` | Break-glass password reset: sets a new password, re-enables the account, signs it out. `PASSWORD_STDIN=1` |
 | `make list-users` | List accounts: username, role, active, must-change, job count |
@@ -511,6 +667,7 @@ single file.
 | API refuses to start: `database schema vN is newer than this code` | The DB was migrated by a newer Mimic. Upgrade Mimic; downgrades aren't supported |
 | `too_long` / `too_short` | The clip is outside 0.5–15 s. Trim it to just the interaction, with about 1 s of stillness before it |
 | `no_motion_detected` | No UI change was found. Make sure the animation is on screen and finishes within the clip |
+| `continuous_motion_unsupported` | Something moves from the first frame but not as one horizontal or vertical scroller (two-axis or rotating content, several strips moving against each other, untrackable motion). The message names the region. Record a component that rests before you interact, or pause that animation |
 | `no_stable_state` | The UI was already moving when recording started. Wait about 1 s before interacting |
 | `unsupported_motion` | The whole page moved (scroll / page transition). Record a single component without scrolling |
 | `decode_failed` | Re-export the clip as an H.264 MP4 |
@@ -527,12 +684,18 @@ recording ─► Layer A: measurement (FFmpeg + OpenCV, deterministic) ─► ev
               probe → preview (background) → scan (30 fps) → decode windows (native fps)
               → elements → per-frame tracking → timing/easing fit + confidence → keyframes
           ─► Layer B: interpretation (optional AI) ─► labels, roles, hierarchy, type check
-          ─► assemble IR (MotionSpec) ─► Technical / LLM prompt / JSON / CSS (pure templates)
+          ─► assemble IR (MotionSpec) ─► Technical / LLM prompt / JSON / CSS (+ JS for scrollers; pure templates)
 ```
+
+Scrollers branch after the scan: regions that move from the first frame are classified (single-axis
+scroller, other ambient motion, page scroll). A scroller with interaction phases is measured as a
+displacement time series, segmented into phases (autoplay, decelerate, paused, drag, inertia,
+snap, stop, resume) with fitted kinematics; anything else ambient is masked out of the transition path.
+Details: [`docs/PLAN-continuous.md`](docs/PLAN-continuous.md).
 
 - **Layer A owns the numbers.** The interpreter's output schema has no numeric fields except its
   own confidence, so it can't change a measured value.
-- **The IR is the source of truth.** All four outputs are deterministic functions of it.
+- **The IR is the source of truth.** All outputs are deterministic functions of it.
 - Geometry is in CSS px: device pixels divided by the display scale.
 - Jobs run in-process with one worker. Job state is in SQLite and files are under
   `data/jobs/<id>/`.
@@ -543,27 +706,48 @@ recording ─► Layer A: measurement (FFmpeg + OpenCV, deterministic) ─► ev
 ```
 api/    FastAPI backend + measurement pipeline (uv, Python 3.13)
 web/    Next.js 16 frontend (App Router, TypeScript, Tailwind, pnpm)
-docs/   PLAN.md (plan + phase notes), PLAN-auth.md (accounts), contract/ (API + IR schema, shared fixture), screenshots/
+docs/   PLAN.md (plan + phase notes), PLAN-auth.md (accounts), PLAN-continuous.md (scrollers), contract/ (API + IR schema, shared fixture), screenshots/
 data/   runtime data: jobs, job DB, synthetic videos (gitignored)
 ```
 
 More detail: [`PRD.md`](PRD.md) (product), [`docs/PLAN.md`](docs/PLAN.md) (architecture,
-algorithms, phase notes), [`docs/PLAN-auth.md`](docs/PLAN-auth.md) (accounts, sessions, authz), [`docs/contract/`](docs/contract/) (JSON schema + sample result),
+algorithms, phase notes), [`docs/PLAN-auth.md`](docs/PLAN-auth.md) (accounts, sessions, authz),
+[`docs/PLAN-continuous.md`](docs/PLAN-continuous.md) (scrollers, round trip, acceptance), [`docs/contract/`](docs/contract/) (JSON schema + sample result),
 [`web/lib/README.md`](web/lib/README.md) (frontend data layer, mock mode).
 
 ## Known limitations
 
 - **Display scale can't be read from pixels.** Auto is a guess. Set it explicitly and record at
   100 % browser zoom.
-- Mimic has been validated only on **synthetic recordings** (clean encodes, ideal cursor). Real
-  recordings will mostly get lower confidence. A re-encoded 15 s copy of a synthetic video moved
-  one start time by about 23 ms.
+- Transitions have been validated only on **synthetic recordings** (clean encodes, ideal
+  cursor); scrollers on the synthetic suite plus one real recording (see
+  [Round-trip check](#round-trip-check)). Real recordings will mostly get lower confidence. A
+  re-encoded 15 s copy of a synthetic video moved one start time by about 23 ms.
 - Easing: the family is usually right, but the exact bezier values are often low confidence.
   Motions shorter than about 150 ms are hard to fit. Strong ease-out curves are reported with
   "(duration uncertain)".
 - Shadow and border-radius values are rough heuristics (the direction is reliable). Spring curves
   are flagged but not reconstructed. Rotation is detected but not measured.
 - One interaction per recording. Extra interactions are ignored with a warning. Scrolling and
-  page transitions are rejected (`unsupported_motion`). Drag, canvas and WebGL are out of scope.
+  page transitions are rejected (`unsupported_motion`). Canvas and WebGL are out of scope; drag
+  is supported only for continuous scrollers (below).
+- **Continuous scrollers:**
+  - **Pointer not visible → triggers are inferred.** Without a cursor in the video, Mimic can't
+    see hover, press or release. It infers them from the motion (a pause that starts a drag is a
+    press; no hover pause is claimed) and says so; enter / leave times are otherwise ±1 frame.
+    Even with a visible cursor the pointer is only tracked outside the moving strip, so whether
+    the content follows it 1:1 is not measured (reported as unknown; the outputs assume 1:1).
+  - **Flat cards that also scale track a few % slow.** With low-texture placeholder cards that
+    scale with their position, the tracker follows the few, mostly central features and reads
+    the speed about 3–4 % low.
+  - **Box repeatability ±2–3 px.** Scroller and card boxes are measured from the video, so two
+    analyses of similar footage (or of a replica) can differ by 2–3 px depending on encoder
+    quality, close to the round trip's ±2 px tolerance.
+  - **Drag peak speeds are rough**, especially when the recorder's frame clock differs from the
+    page's (macOS captures on a 13.3 ms grid): lower confidence and a note. Release speeds and
+    momentum τ are more reliable than the peak.
+  - Card size / title are found only when the card spacing (pitch) was observed. A momentum that
+    fades out is considered at rest at 10 px/s. Card scaling is modelled as growth with the
+    distance from the centre only.
 - Long motions (> 150 frames in the analysed window) are analysed at a lower frame rate (warning
   `frames_subsampled`). Jobs run one at a time.

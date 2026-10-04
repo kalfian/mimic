@@ -1087,6 +1087,25 @@ WebM
 max 15 seconds
 ```
 
+### Tambahan scope: continuous motion (2026-10-03)
+
+Selain interaction di atas (UI diam → interaksi → diam), Mimic juga menganalisis **satu
+scroller satu sumbu** (marquee / carousel yang auto-scroll) yang bergerak sejak awal
+recording dan boleh diinteraksi:
+
+```text
+Autoplay (kecepatan konstan, arah, panjang loop bila terlihat)
+Pause / melambat saat hover atau press
+Drag (konten mengikuti pointer)
+Inertia / momentum setelah dilepas (τ, kecepatan saat release)
+Snap ke kartu terdekat (atau "abrupt stop" yang ambigu)
+Resume autoplay (delay + ramp)
+```
+
+Output mode ini: Technical description, LLM-ready prompt, JSON, CSS, dan **JS driver**
+(contoh implementasi). Gerak lain yang aktif sejak awal tapi bukan scroller satu sumbu ditolak
+dengan pesan yang jelas, bukan "no motion". Detail: `docs/PLAN-continuous.md`.
+
 ---
 
 # 26. Out of Scope — MVP
@@ -1106,6 +1125,11 @@ exact source-code reconstruction
 ```
 
 Masalah tersebut bisa ditambahkan setelah motion analysis dasar reliable.
+
+Catatan (2026-10-03): drag pada **satu scroller satu sumbu** (drag, inertia, snap, resume
+autoplay) sudah masuk scope, lihat §25. Yang tetap di luar scope: drag-and-drop item,
+panning dua sumbu, carousel 3D / rotasi, nested scroller, lebih dari satu scroller yang
+dianalisis per recording, dan **rekonstruksi parameter spring** (overshoot hanya ditandai).
 
 ---
 

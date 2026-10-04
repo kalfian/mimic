@@ -1,0 +1,65 @@
+CONTINUOUS MOTION
+
+Scroller: Product carousel (e1) — carousel, horizontal (x axis)
+Type: Draggable scroller (carousel) — high confidence (85%), from interpreter
+Trigger: Hovering pauses the carousel; dragging moves it, then it snaps.
+Trigger kind: drag — high confidence (85%)
+Region: 1200×240 px at x 120, y 200 — medium (75%)
+Card pitch (card + gap): ≈216 px — high (80%)
+Analysed span: 0–8000 ms (≈8000 ms)
+
+AUTOPLAY
+
+Direction: left (content moves to the left)
+Speed: ≈40 px/s, linear — high (90%)
+Loop: not observed (the content did not repeat within the recording)
+
+PHASES
+
+#   Kind                          Time (ms)  Velocity (px/s)  Key value                                                                                          Confidence
+p1  autoplay                      0–2000     -40 → -40        constant ≈40 px/s                                                                                  high (90%)
+p2  decelerate [velocity+cursor]  2000–2400  -40 → 0          ramp -40 → 0 px/s over ≈400 ms, ease-out                                                           high (85%)
+p3  paused                        2400–2600  0 → 0            —                                                                                                  high (80%)
+p4  drag [cursor]                 2600–3000  0 → -700         peak -800 px/s                                                                                     high (85%)
+p5  snap                          3000–3300  -700 → 0         tween ≈16 px (medium) over ≈300 ms (medium), ease-out                                              medium (75%)
+p6  paused                        3300–3700  0 → 0            —                                                                                                  high (80%)
+p7  resume                        3700–4300  0 → -40          ramp 0 → -40 px/s over ≈600 ms (medium), cubic-bezier(0.65, 0, 0.35, 1) (close to easeInOutCubic)  medium (70%)
+p8  autoplay                      4300–8000  -40 → -40        constant ≈40 px/s                                                                                  high (90%)
+
+BEHAVIOUR
+
+Pause: on hover — high (85%)
+  Slowdown: ≈400 ms, ease-out — high (80%)
+  Comes to a full stop: yes
+Drag: 1 drag
+  Follows the pointer: yes (content / pointer speed 1.00 — high (85%))
+  Peak speed: ≈800 px/s — high (80%)
+Momentum (inertia): not observed
+Snap: to the card grid
+  Step: ≈216 px — high (80%)
+  Duration: ≈300 ms, ease-out — medium (75%)
+  Overshoot: no
+Resume:
+  Delay after rest: ≈400 ms — medium (70%)
+  Delay after release: ≈700 ms — medium (60%)
+  Ramp: ≈600 ms, cubic-bezier(0.65, 0, 0.35, 1) (close to easeInOutCubic) — medium (70%)
+  Speed after resuming: ≈40 px/s, same direction
+
+APPEARANCE
+
+Viewport: 1440×900 px (recorded frame)
+Page background: #FFFFFF — high (90%)
+Product carousel (e1): 1200×240 px at x 120, y 200
+Product card (e2): 200×160 px, vertically centred in the product carousel; background #F4F4F6 — high (80%); corner radius ≈8 px — medium (60%); shadow 0 4px 12px rgba(0, 0, 0, 0.08) — medium (50%)
+Card title (e3): 120×20 px, upper part of the product card; font size ≈14 px — medium (50%)
+
+UNCERTAIN OBSERVATIONS
+
+- card title text colour: #222222 (20% confidence). Not included above.
+
+NOTES
+
+- Values are visual estimates from a screen recording, not source CSS.
+- Geometry is in CSS px; display scale assumed 2x from the 2880x1800 recording.
+- Timing resolution: about 18ms per frame (60 fps effective).
+- Signed velocities: positive = content moves right (x) / down (y).

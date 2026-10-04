@@ -2,20 +2,24 @@
 
 import Link from "next/link";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { IconArrowLeft, IconCheck } from "@/components/icons";
+import { ContinuousSummary } from "@/components/result/ContinuousSummary";
 import { InteractionSummary } from "@/components/result/InteractionSummary";
 import { KeyframeStrip } from "@/components/result/KeyframeStrip";
 import { MotionTimeline } from "@/components/result/MotionTimeline";
 import { SpecTabs } from "@/components/result/SpecTabs";
 import { usePlayback } from "@/components/result/usePlayback";
+import { VelocityChart } from "@/components/result/VelocityChart";
 import { VideoPlayer } from "@/components/result/VideoPlayer";
 import { WarningsPanel } from "@/components/result/WarningsPanel";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { assetUrl } from "@/lib/api";
 import { formatPixelRatio, INTERACTION_TYPE_LABELS, INTERPRETATION_STATUS_LABELS } from "@/lib/format";
+import { isContinuousSpec } from "@/lib/spec";
 import type { ResultEnvelope } from "@/lib/types";
+import { bandAt, bandForKeyframe, buildBehaviorSummary, buildVelocityModel, findBand } from "@/lib/velocity";
 
 export function ResultView({
   result,
@@ -40,6 +44,23 @@ export function ResultView({
   const fps = source.fps_effective > 0 ? source.fps_effective : 60;
   const playback = usePlayback(src, 1000 / fps, source.duration_ms);
   const relabeledRef = useRef<HTMLParagraphElement>(null);
+
+  // Continuous mode (mode read through isContinuousSpec: stored 0.1 results have no `mode`).
+  const continuous = isContinuousSpec(spec) ? spec : null;
+  const velocity = useMemo(() => (continuous ? buildVelocityModel(continuous.continuous, { cursor: continuous.cursor }) : null), [continuous]);
+  const behaviour = useMemo(() => (continuous ? buildBehaviorSummary(continuous.continuous) : null), [continuous]);
+  const [phaseId, setPhaseId] = useState<string | null>(null);
+  const selectPhase = (id: string) => {
+    const band = velocity ? findBand(velocity, id) : null;
+    if (!band) return;
+    setPhaseId(id);
+    playback.seek(band.start_ms);
+  };
+  const seekKeyframe = (ms: number) => {
+    playback.seek(ms);
+    const band = velocity ? bandAt(velocity, ms) : null;
+    if (band) setPhaseId(band.phase_id);
+  };
 
   // The relabel controls unmount when AI labels arrive; give keyboard focus a place to land.
   useEffect(() => {
@@ -78,35 +99,60 @@ export function ResultView({
           <CopyButton text={outputs.llm_prompt} label="Copy LLM prompt" variant="primary" size="md" />
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 sm:justify-end">
             <a href="#spec" className="focus-ring rounded-sm text-xs text-ink-3 underline-offset-4 hover:text-ink hover:underline">
-              All formats: technical, JSON, CSS
+              All formats: technical, JSON, CSS{continuous ? ", JS" : ""}
             </a>
             {actions}
           </div>
         </div>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-12">
+      {/* Continuous: the second row is flexible, so the tall summary's extra height goes there, not under the video. */}
+      <div className={`grid gap-6 lg:grid-cols-12 ${continuous ? "lg:grid-rows-[auto_1fr]" : ""}`}>
         <div className="min-w-0 lg:col-span-7">
-          <VideoPlayer src={src} playback={playback} source={source} segments={spec.segments} keyframes={artifacts.keyframes} />
+          <VideoPlayer
+            src={src}
+            playback={playback}
+            source={source}
+            segments={spec.segments}
+            keyframes={artifacts.keyframes}
+            continuous={continuous != null}
+          />
           <p className="mt-2 text-xs text-ink-3">{spec.meta.disclaimer}</p>
         </div>
-        <div className="min-w-0 space-y-6 lg:col-span-5">
-          <InteractionSummary spec={spec} />
-          <WarningsPanel spec={spec} labelAction={labelAction} />
-        </div>
+        {continuous && velocity && behaviour ? (
+          <>
+            {/* The behaviour summary is tall: it spans two rows and the notes fill the space under the video. */}
+            <div className="min-w-0 lg:col-span-5 lg:row-span-2">
+              <ContinuousSummary spec={continuous} rows={behaviour} model={velocity} onPhase={selectPhase} />
+            </div>
+            <div className="min-w-0 lg:col-span-7 lg:col-start-1 lg:row-start-2">
+              <WarningsPanel spec={spec} labelAction={labelAction} />
+            </div>
+          </>
+        ) : (
+          <div className="min-w-0 space-y-6 lg:col-span-5">
+            <InteractionSummary spec={spec} />
+            <WarningsPanel spec={spec} labelAction={labelAction} />
+          </div>
+        )}
       </div>
 
-      <MotionTimeline spec={spec} playback={playback} />
+      {velocity ? (
+        <VelocityChart model={velocity} playback={playback} selectedId={phaseId} onSelect={setPhaseId} />
+      ) : (
+        <MotionTimeline spec={spec} playback={playback} />
+      )}
 
       <KeyframeStrip
         keyframes={artifacts.keyframes}
         elements={spec.elements}
         source={source}
         playheadMs={playback.currentMs}
-        onSeek={playback.seek}
+        onSeek={velocity ? seekKeyframe : playback.seek}
+        phaseOf={velocity ? (t) => bandForKeyframe(velocity, t) : undefined}
       />
 
-      <SpecTabs outputs={outputs} disclaimer={spec.meta.disclaimer} />
+      <SpecTabs outputs={outputs} disclaimer={spec.meta.disclaimer} schemaVersion={spec.schema_version} continuous={continuous != null} />
     </div>
   );
 }

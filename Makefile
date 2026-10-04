@@ -57,8 +57,23 @@ synth: ## Render synthetic scenario videos + ground truth into data/synth (Track
 eval: ## Run the pipeline on data/synth, write <name>.ir.json, check PLAN §11.4 thresholds
 	cd $(API_DIR) && uv run python scripts/eval_synth.py
 
-calibrate: ## Monte Carlo check of confidence bands vs §11.4 targets (high band >= 90 % in target)
+calibrate: ## Monte Carlo check of confidence bands vs §11.4 / continuous §8.4 targets (high band >= 90 %)
 	cd $(API_DIR) && uv run python scripts/calibrate_confidence.py
+	cd $(API_DIR) && uv run python scripts/calibrate_continuous.py
+
+# Round trip (PLAN-continuous §14): replay a replica page in headless Chrome, re-analyze, compare
+# with the source IR. HTML/IR/OUT only count when given on the command line.
+RT_HTML := $(if $(filter command line,$(origin HTML)),$(HTML))
+RT_IR := $(if $(filter command line,$(origin IR)),$(IR))
+RT_OUT := $(if $(filter command line,$(origin OUT)),$(OUT))
+.PHONY: roundtrip
+roundtrip: ## Replica check HTML=index.html IR=source.json [OUT=dir]; no args = harness self-check on synthetic truth
+	@if [ -n "$(RT_HTML)" ] || [ -n "$(RT_IR)" ]; then \
+	  if [ -z "$(RT_HTML)" ] || [ -z "$(RT_IR)" ]; then echo "usage: make roundtrip HTML=index.html IR=source.json [OUT=dir]"; exit 2; fi; \
+	  cd $(API_DIR) && uv run python scripts/roundtrip.py "$(abspath $(RT_HTML))" "$(abspath $(RT_IR))" $(if $(RT_OUT),--out "$(abspath $(RT_OUT))"); \
+	else \
+	  cd $(API_DIR) && uv run python scripts/roundtrip_validate.py; \
+	fi
 
 # Accounts (docs/PLAN-auth.md §6). Passwords are prompted for (or read from stdin with
 # PASSWORD_STDIN=1), never passed as arguments. USER= only counts when given on the command

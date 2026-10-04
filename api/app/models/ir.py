@@ -10,13 +10,18 @@ The IR is the single source of truth for every output (D5). Conventions:
   default via ``serialize_by_alias``.
 * ``initial_state`` / ``active_state`` are computed from forward transitions; any copies present
   in input JSON are ignored and recomputed.
+* IR 0.2 (PLAN-continuous §5) adds ``mode`` (always serialized) and the optional ``continuous``
+  section (continuous mode only). Fields added in 0.2 that a transition spec does not use
+  (``continuous``, ``scene``, ``ElementStatic`` appearance values) are **omitted from the JSON
+  when null**, so a 0.2 transition spec differs from 0.1 only in ``schema_version`` and ``mode``.
+  Stored 0.1 documents (no ``mode``) still validate and load as ``mode="transition"``.
 
 Changing this module after P0 needs one coordinated edit + ``make contract``.
 """
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, get_args
 
 from pydantic import (
     AwareDatetime,
@@ -28,29 +33,36 @@ from pydantic import (
     model_validator,
 )
 
-SCHEMA_VERSION: Literal["0.1"] = "0.1"
+#: Version the pipeline emits. ``MotionSpec.schema_version`` also accepts ``"0.1"`` (stored jobs).
+SCHEMA_VERSION: Literal["0.2"] = "0.2"
+SchemaVersion = Literal["0.1", "0.2"]
 DISCLAIMER = "Values are visual estimates from a screen recording, not source CSS."
 
 # --------------------------------------------------------------------------------------------
 # Closed vocabularies
 # --------------------------------------------------------------------------------------------
 
+#: ``continuous`` = autoplaying scroller without pointer drag (marquee); ``drag`` = scroller the
+#: user drags (carousel). Both only in ``mode="continuous"`` (see ``CONTINUOUS_INTERACTION_TYPES``).
 InteractionType = Literal[
-    "hover", "click", "press", "expand_collapse", "dropdown", "modal", "unknown"
-]
+    "hover", "click", "press", "expand_collapse", "dropdown", "modal", "unknown",
+    "continuous", "drag",
+]  # fmt: skip
 TypeSource = Literal["heuristic", "interpreter"]
-Pattern = Literal["card", "button", "menu", "accordion", "modal", "generic"]
-TriggerKind = Literal["pointer_enter", "click", "unknown"]
+Pattern = Literal["card", "button", "menu", "accordion", "modal", "generic", "marquee", "carousel"]
+TriggerKind = Literal["pointer_enter", "click", "unknown", "autoplay", "drag"]
 ReverseTriggerKind = Literal["pointer_leave", "click", "none", "unknown"]
-Direction = Literal["forward", "forward_reverse", "round_trip"]
+#: ``continuous`` <-> ``segments == []`` and ``mode == "continuous"``.
+Direction = Literal["forward", "forward_reverse", "round_trip", "continuous"]
 
 ElementKind = Literal[
-    "transform", "photometric", "appear", "disappear", "backdrop", "resize", "content_change"
-]
+    "transform", "photometric", "appear", "disappear", "backdrop", "resize", "content_change",
+    "scroller",
+]  # fmt: skip
 Role = Literal[
     "card", "button", "image", "icon", "text", "title", "label", "container",
     "dropdown_menu", "menu_item", "modal_panel", "backdrop", "list_item",
-    "link", "input", "badge", "accordion_panel", "other",
+    "link", "input", "badge", "accordion_panel", "other", "scroller",
 ]  # fmt: skip
 LabelSource = Literal["interpreter", "heuristic"]
 
@@ -80,7 +92,49 @@ WarningCode = Literal[
     "extra_segments_ignored", "elements_truncated", "short_stable_state", "not_settled",
     "rotation_detected", "interpretation_fallback", "interpretation_disagrees",
     "low_fps_source", "preview_unavailable", "reverse_not_recorded", "frames_subsampled",
+    "ambient_motion_masked", "extra_scrollers_ignored", "tracking_degraded",
+    "loop_period_not_observed",
 ]  # fmt: skip
+
+# ---- continuous mode (PLAN-continuous §5) ----------------------------------------------------
+SpecMode = Literal["transition", "continuous"]
+Axis = Literal["x", "y"]
+AutoplayDirection = Literal["left", "right", "up", "down"]
+PhaseKind = Literal[
+    "autoplay", "decelerate", "paused", "drag", "inertia", "snap", "stop", "resume", "unknown"
+]
+PhaseEvidence = Literal["velocity", "cursor", "velocity+cursor"]
+PauseTrigger = Literal["hover", "press", "unknown"]
+InertiaModel = Literal["exponential", "tween"]
+SnapKind = Literal["grid", "abrupt_ambiguous"]
+#: Documents the sign of every signed velocity / displacement in the ``continuous`` section.
+SIGN_CONVENTION = "positive = content moves right (x) / down (y)"
+SignConvention = Literal["positive = content moves right (x) / down (y)"]
+
+#: Interaction types / roles that only exist in continuous mode. The interpreter schema for
+#: transition jobs excludes them (``interpret/schema.py``) so Layer B cannot pick them there.
+CONTINUOUS_INTERACTION_TYPES: tuple[str, ...] = ("continuous", "drag")
+CONTINUOUS_ROLES: tuple[str, ...] = ("scroller",)
+#: Phase kinds in grammar order (exported to ``types.ts`` as ``PHASE_KINDS``).
+PHASE_KINDS: tuple[str, ...] = get_args(PhaseKind)
+#: Upper bound of ``ContinuousMotion.samples`` (decimated velocity profile for the UI chart).
+CONTINUOUS_SAMPLE_MAX = 900
+#: Allowed ``Phase.fit.model`` per phase kind (``None`` = no fit).
+PHASE_FIT_MODELS: dict[str, frozenset[str | None]] = {
+    "autoplay": frozenset({"constant"}),
+    "decelerate": frozenset({"ramp"}),
+    "resume": frozenset({"ramp"}),
+    "inertia": frozenset({"exponential", "tween"}),
+    "snap": frozenset({"tween", None}),
+    "drag": frozenset({None}),
+    "stop": frozenset({None}),
+    "paused": frozenset({None}),
+    "unknown": frozenset({None}),
+}
+#: |autoplay.velocity_px_s| must equal autoplay.speed_px_s.value within this.
+VELOCITY_SPEED_TOL = 1e-6
+#: |loop.duration_ms - period_px / speed * 1000| tolerance (rounding of stored values), ms.
+LOOP_DURATION_TOL_MS = 1.0
 
 JobId = Annotated[str, Field(pattern=r"^[0-9a-f]{32}$")]
 ElementId = Annotated[str, Field(pattern=r"^e[1-9][0-9]*$")]
@@ -88,6 +142,13 @@ TransitionId = Annotated[str, Field(pattern=r"^t[1-9][0-9]*$")]
 HexColor = Annotated[str, Field(pattern=r"^#[0-9A-F]{6}$", description="Uppercase #RRGGBB.")]
 Score = Annotated[float, Field(ge=0.0, le=1.0)]
 Ms = Annotated[int, Field(ge=0, description="Milliseconds.")]
+PhaseId = Annotated[str, Field(pattern=r"^p[1-9][0-9]*$")]
+
+
+def _omit_if_none(v: Any) -> bool:
+    """``Field(exclude_if=...)`` predicate: optional 0.2 additions are left out when null."""
+    return v is None
+
 
 #: Which ``Value.kind`` each property must use for ``from``/``to``.
 PROPERTY_VALUE_KIND: dict[str, str] = {
@@ -250,6 +311,20 @@ class MeasuredShadow(IRModel):
     confidence: Confidence
 
 
+class MeasuredColor(IRModel):
+    """A static (non-animated) solid colour estimate with its own confidence."""
+
+    value: HexColor
+    confidence: Confidence
+
+
+class Size(IRModel):
+    """Width x height in CSS px."""
+
+    w: float = Field(gt=0)
+    h: float = Field(gt=0)
+
+
 # --------------------------------------------------------------------------------------------
 # Sections
 # --------------------------------------------------------------------------------------------
@@ -307,10 +382,31 @@ class Interaction(IRModel):
 
 
 class ElementStatic(IRModel):
-    """Non-animated element properties (low confidence heuristics)."""
+    """Non-animated element properties (low confidence heuristics), measured in state A.
+
+    The appearance values (PLAN-continuous §13) are optional and omitted from the JSON when not
+    measured: ``background_color`` (element fill), ``text_color`` (text-like elements only) and
+    ``font_size_px`` (rough estimate from the text line height; confidence at most medium).
+    """
 
     border_radius_px: MeasuredNumber | None = None
     shadow: MeasuredShadow | None = None
+    background_color: MeasuredColor | None = Field(default=None, exclude_if=_omit_if_none)
+    text_color: MeasuredColor | None = Field(default=None, exclude_if=_omit_if_none)
+    font_size_px: MeasuredNumber | None = Field(default=None, exclude_if=_omit_if_none)
+
+    @model_validator(mode="after")
+    def _font_size_capped(self) -> ElementStatic:
+        if self.font_size_px is not None and self.font_size_px.confidence.band == "high":
+            raise ValueError("font_size_px confidence is capped at medium (< 0.8)")
+        return self
+
+
+class Scene(IRModel):
+    """Recorded page context (PLAN-continuous §13). Optional; omitted when not measured."""
+
+    viewport_css: Size = Field(description="Recorded frame size in CSS px.")
+    page_background: MeasuredColor | None = Field(default=None, exclude_if=_omit_if_none)
 
 
 class MotionElement(IRModel):
@@ -486,6 +582,361 @@ class SpecWarning(IRModel):
 
 
 # --------------------------------------------------------------------------------------------
+# Continuous mode (PLAN-continuous §5): one single-axis scroller
+# --------------------------------------------------------------------------------------------
+#
+# Velocities are CSS px/s and signed per ``SIGN_CONVENTION`` (+ = content moves right / down);
+# ``*_ms`` times are absolute video milliseconds like the rest of the IR.
+
+
+class LoopInfo(IRModel):
+    """Seamless-loop length of the autoplay content. Never guessed: ``observed`` is false when
+    the content did not repeat within the recording (``period_px``/``duration_ms`` null)."""
+
+    observed: bool
+    period_px: MeasuredNumber | None = Field(description="Length of one content copy, CSS px.")
+    duration_ms: MeasuredNumber | None = Field(
+        description="period_px / speed (stored so outputs can quote it, never recomputed)."
+    )
+
+    @model_validator(mode="after")
+    def _check(self) -> LoopInfo:
+        if self.observed != (self.period_px is not None):
+            raise ValueError("loop.observed must be true exactly when period_px is set")
+        if self.observed != (self.duration_ms is not None):
+            raise ValueError("loop.duration_ms must be set exactly when the loop is observed")
+        return self
+
+
+class Autoplay(IRModel):
+    """Constant-velocity autoplay before any interaction."""
+
+    direction: AutoplayDirection
+    speed_px_s: MeasuredNumber = Field(description="|velocity|, CSS px/s (> 0).")
+    velocity_px_s: float = Field(description="Signed velocity; same magnitude as speed_px_s.")
+    easing: Literal["linear"] = "linear"
+    loop: LoopInfo
+
+    @model_validator(mode="after")
+    def _check(self) -> Autoplay:
+        speed = self.speed_px_s.value
+        if speed <= 0:
+            raise ValueError("autoplay.speed_px_s must be > 0")
+        if abs(abs(self.velocity_px_s) - speed) > VELOCITY_SPEED_TOL:
+            raise ValueError("autoplay |velocity_px_s| must equal speed_px_s.value")
+        positive = self.direction in ("right", "down")
+        if (self.velocity_px_s > 0) != positive:
+            raise ValueError(
+                f"autoplay velocity sign does not match direction {self.direction!r} "
+                f"({SIGN_CONVENTION})"
+            )
+        if self.loop.observed:
+            assert self.loop.period_px is not None and self.loop.duration_ms is not None
+            expected = self.loop.period_px.value / speed * 1000.0
+            if abs(self.loop.duration_ms.value - expected) > LOOP_DURATION_TOL_MS:
+                raise ValueError(f"loop.duration_ms must equal period_px / speed ({expected:.1f})")
+        return self
+
+
+class ConstantFit(IRModel):
+    """``x(t) = x0 + v t`` (autoplay)."""
+
+    model: Literal["constant"] = "constant"
+    velocity_px_s: MeasuredNumber
+
+
+class ExponentialFit(IRModel):
+    """Inertia: ``v(t) = v_inf + (v0 - v_inf) e^(-t/tau)``, fitted in the position domain."""
+
+    model: Literal["exponential"] = "exponential"
+    tau_ms: MeasuredNumber
+    v0_px_s: MeasuredNumber = Field(description="Release velocity (signed).")
+    v_inf_px_s: float = Field(description="Asymptotic velocity: 0 or the autoplay velocity.")
+    stop_px_s: float | None = Field(
+        default=None,
+        ge=0,
+        exclude_if=_omit_if_none,
+        description="Speed (|v| of the decay) at which the content was observed to come to "
+        "rest; the momentum is dropped below it. Omitted when the decay did not end at rest.",
+    )
+
+
+class RampFit(IRModel):
+    """Eased velocity ramp ``v = from + (to - from) E((t - t0) / D)`` (decelerate / resume)."""
+
+    model: Literal["ramp"] = "ramp"
+    from_px_s: float
+    to_px_s: float
+    duration_ms: MeasuredNumber
+    easing: Easing
+
+
+class TweenFit(IRModel):
+    """Eased position tween ``x = x0 + D E((t - t0) / T)`` (snap, tween-style inertia)."""
+
+    model: Literal["tween"] = "tween"
+    distance_px: MeasuredNumber = Field(description="Signed distance travelled.")
+    duration_ms: MeasuredNumber
+    easing: Easing
+
+
+PhaseFit = Annotated[
+    ConstantFit | ExponentialFit | RampFit | TweenFit,
+    Field(discriminator="model"),
+]
+
+
+class Phase(IRModel):
+    """One labelled stretch of the scroller's velocity profile (chronological, no overlap)."""
+
+    id: PhaseId
+    kind: PhaseKind
+    start_ms: Ms
+    end_ms: Ms
+    v_start_px_s: float
+    v_end_px_s: float
+    v_peak_px_s: float = Field(description="Signed velocity with the largest magnitude.")
+    displacement_px: float
+    fit: PhaseFit | None = None
+    interrupted: bool = Field(
+        default=False, description="Cut short, e.g. decelerate cut by a drag, inertia re-grabbed."
+    )
+    evidence: PhaseEvidence = "velocity"
+    confidence: Confidence = Field(description="Label confidence.")
+    notes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _check(self) -> Phase:
+        if self.end_ms <= self.start_ms:
+            raise ValueError(f"phase {self.id}: end_ms must be after start_ms")
+        model = self.fit.model if self.fit is not None else None
+        if model not in PHASE_FIT_MODELS[self.kind]:
+            allowed = sorted(str(m) for m in PHASE_FIT_MODELS[self.kind])
+            raise ValueError(
+                f"phase {self.id}: fit {model!r} not allowed for {self.kind} {allowed}"
+            )
+        return self
+
+
+class PauseBehavior(IRModel):
+    """Autoplay slows to a stop when the pointer hovers / presses (``on``)."""
+
+    on: PauseTrigger
+    on_confidence: Confidence
+    decel_ms: MeasuredNumber | None
+    easing: Easing | None
+    stops_completely: bool
+
+
+class DragBehavior(IRModel):
+    count: int = Field(ge=1, description="Number of drag phases.")
+    follows_pointer: bool | None = Field(description="null = no cursor visible to compare.")
+    pointer_ratio: MeasuredNumber | None = Field(description="Content / pointer velocity.")
+    peak_speed_px_s: MeasuredNumber
+
+
+class InertiaBehavior(IRModel):
+    """Momentum after release, aggregated over ``instances`` inertia phases."""
+
+    model: InertiaModel
+    tau_ms: MeasuredNumber | None = Field(description="Set when model is exponential.")
+    duration_ms: MeasuredNumber | None = Field(description="Set when model is tween.")
+    easing: Easing | None = Field(description="Set when model is tween.")
+    release_speed_min_px_s: float = Field(ge=0)
+    release_speed_max_px_s: float = Field(ge=0)
+    instances: int = Field(ge=1)
+    stop_px_s: MeasuredNumber | None = Field(
+        default=None,
+        exclude_if=_omit_if_none,
+        description="Exponential model: minimum speed at which the momentum stops (aggregated "
+        "ExponentialFit.stop_px_s). Omitted when not observed.",
+    )
+
+    @model_validator(mode="after")
+    def _check(self) -> InertiaBehavior:
+        if self.model == "exponential" and self.tau_ms is None:
+            raise ValueError("exponential inertia needs tau_ms")
+        if self.model == "tween" and (self.duration_ms is None or self.easing is None):
+            raise ValueError("tween inertia needs duration_ms and easing")
+        if self.release_speed_min_px_s > self.release_speed_max_px_s:
+            raise ValueError("release_speed_min_px_s must be <= release_speed_max_px_s")
+        return self
+
+
+class SnapBehavior(IRModel):
+    """``grid``: rests land on the card pitch. ``abrupt_ambiguous``: abrupt stops that may be a
+    snap or the pointer stopping before release (no grid evidence; from ``stop`` phases)."""
+
+    kind: SnapKind
+    step_px: MeasuredNumber | None
+    duration_ms: MeasuredNumber | None
+    easing: Easing | None
+    overshoot: bool = Field(description="Spring-like overshoot seen; spring not reconstructed.")
+
+    @model_validator(mode="after")
+    def _check(self) -> SnapBehavior:
+        if self.kind == "grid" and self.step_px is None:
+            raise ValueError("grid snap needs step_px")
+        if self.kind == "abrupt_ambiguous" and self.step_px is not None:
+            raise ValueError("abrupt_ambiguous snap has no step_px")
+        return self
+
+
+class ResumeBehavior(IRModel):
+    delay_after_rest_ms: MeasuredNumber
+    delay_after_release_ms: MeasuredNumber | None
+    delay_after_leave_ms: MeasuredNumber | None = Field(
+        default=None,
+        exclude_if=_omit_if_none,
+        description="Hover pause: resume onset after the pointer left the scroller. Omitted "
+        "when no pointer leave was seen before the resume.",
+    )
+    ramp_ms: MeasuredNumber
+    easing: Easing | None
+    to_speed_px_s: float = Field(ge=0)
+    direction_preserved: bool
+
+
+class Behavior(IRModel):
+    """What the generators print; each value aggregated over phase instances. null = not seen."""
+
+    pause: PauseBehavior | None = None
+    drag: DragBehavior | None = None
+    inertia: InertiaBehavior | None = None
+    snap: SnapBehavior | None = None
+    resume: ResumeBehavior | None = None
+
+
+class Span(IRModel):
+    start_ms: Ms
+    end_ms: Ms
+
+    @model_validator(mode="after")
+    def _check(self) -> Span:
+        if self.end_ms <= self.start_ms:
+            raise ValueError("span end_ms must be after start_ms")
+        return self
+
+
+#: ``[t_ms, v_px_s, pos_px, quality]`` (velocity smoothed; position integrated, signed).
+ContinuousSample = tuple[Ms, float, float, Score]
+
+#: |card_scale.mean_scale - 1 - (scale_at_reference - 1) (half / reference)² / 3| tolerance
+#: (rounding of the stored values).
+CARD_SCALE_MEAN_TOL = 1e-3
+#: card_scale.reference_distance_px may exceed half the region length by this much (rounding).
+CARD_SCALE_REACH_TOL_PX = 1.0
+
+
+class CardScale(IRModel):
+    """Cards scale with their on-screen distance from the scroller centre (a position-driven
+    transform updated every frame; PLAN-continuous P2c).
+
+    ``scale(d) = 1 + (scale_at_reference - 1) · (d / reference_distance_px)²`` where ``d`` is
+    the distance (CSS px, along the axis) of a card's centre from the scroller centre: 1 at the
+    centre, so the card element box, ``pitch_px`` and ``gap_px`` describe the card at the
+    centre. ``reference_distance_px`` is the farthest whole card measured (the curve beyond is
+    an extrapolation). The cards stay packed — the gaps keep their size — so neighbours move
+    apart as they grow.
+
+    Speeds and displacements in the ``continuous`` section are on-screen values; on average over
+    the scroller the content is magnified ``mean_scale`` times (``1 + (scale_at_reference - 1)
+    · (half / reference_distance_px)² / 3``, half = half the region length along the axis),
+    so an unscaled track moves at ``speed / mean_scale``. Stored so outputs can quote it.
+    """
+
+    model: Literal["quadratic"] = "quadratic"
+    origin: Literal["scroller_center"] = "scroller_center"
+    reference_distance_px: float = Field(
+        gt=0, description="Farthest measured card-centre distance from the scroller centre."
+    )
+    scale_at_reference: float = Field(gt=1, description="Card scale at reference_distance_px.")
+    mean_scale: float = Field(
+        ge=1, description="Mean on-screen magnification over the scroller (speed conversion)."
+    )
+    confidence: Confidence
+
+
+class ContinuousMotion(IRModel):
+    """The analysed scroller (``mode == "continuous"`` only)."""
+
+    element_id: ElementId = Field(description='MotionElement with kind "scroller".')
+    axis: Axis
+    region: Box = Field(description="Scroller viewport, CSS px.")
+    region_confidence: Confidence
+    sign_convention: SignConvention = SIGN_CONVENTION
+    autoplay: Autoplay | None = Field(description="null = no autoplay before interaction.")
+    pitch_px: MeasuredNumber | None = Field(description="Card spacing (card + gap) if observed.")
+    gap_px: MeasuredNumber | None = Field(
+        default=None, description="Gap between cards if observed (PLAN-continuous §13)."
+    )
+    card_scale: CardScale | None = Field(
+        default=None,
+        exclude_if=_omit_if_none,
+        description="Cards scale with their distance from the scroller centre. Omitted when the "
+        "cards were rigid or not measured.",
+    )
+    phases: list[Phase] = Field(min_length=1)
+    behavior: Behavior
+    span_ms: Span = Field(description="Analysed span (= interaction.total_duration_ms.forward).")
+    samples: list[ContinuousSample] = Field(
+        default_factory=list,
+        max_length=CONTINUOUS_SAMPLE_MAX,
+        description="[t_ms, v_px_s, pos_px, quality] for the velocity chart. Excluded from the "
+        "JSON export.",
+    )
+
+    @model_validator(mode="after")
+    def _check(self) -> ContinuousMotion:  # noqa: C901 - flat list of rules
+        if self.autoplay is not None:
+            want = ("left", "right") if self.axis == "x" else ("up", "down")
+            if self.autoplay.direction not in want:
+                raise ValueError(
+                    f"autoplay direction {self.autoplay.direction!r} not on {self.axis}"
+                )
+        prev_end = self.span_ms.start_ms
+        for i, ph in enumerate(self.phases):
+            if ph.id != f"p{i + 1}":
+                raise ValueError(f"phase ids must be p1..pN in order, got {ph.id!r} at {i}")
+            if ph.start_ms < prev_end:
+                raise ValueError(f"phase {ph.id} overlaps the previous phase or the span start")
+            prev_end = ph.end_ms
+        if prev_end > self.span_ms.end_ms:
+            raise ValueError("phases must end within span_ms")
+        kinds = [ph.kind for ph in self.phases]
+        b = self.behavior
+        if (b.drag is not None) != ("drag" in kinds):
+            raise ValueError("behavior.drag must be set exactly when a drag phase exists")
+        if b.drag is not None and b.drag.count != kinds.count("drag"):
+            raise ValueError("behavior.drag.count must equal the number of drag phases")
+        if (b.inertia is not None) != ("inertia" in kinds):
+            raise ValueError("behavior.inertia must be set exactly when an inertia phase exists")
+        if b.inertia is not None and b.inertia.instances != kinds.count("inertia"):
+            raise ValueError("behavior.inertia.instances must equal the number of inertia phases")
+        if b.snap is not None:
+            need = "snap" if b.snap.kind == "grid" else "stop"
+            if need not in kinds:
+                raise ValueError(f"{b.snap.kind} snap needs a {need!r} phase")
+        if b.resume is not None and "resume" not in kinds:
+            raise ValueError("behavior.resume needs a resume phase")
+        last_t = -1
+        for t_ms, _v, _x, _q in self.samples:
+            if t_ms <= last_t:
+                raise ValueError("samples must be strictly increasing in t_ms")
+            last_t = t_ms
+        cs = self.card_scale
+        if cs is not None:
+            half = (self.region.w if self.axis == "x" else self.region.h) / 2.0
+            if cs.reference_distance_px > half + CARD_SCALE_REACH_TOL_PX:
+                raise ValueError("card_scale.reference_distance_px must lie inside the region")
+            rel = half / cs.reference_distance_px
+            expected = 1.0 + (cs.scale_at_reference - 1.0) * rel * rel / 3.0
+            if abs(cs.mean_scale - expected) > CARD_SCALE_MEAN_TOL:
+                raise ValueError(f"card_scale.mean_scale must equal {expected:.4f}")
+        return self
+
+
+# --------------------------------------------------------------------------------------------
 # Root
 # --------------------------------------------------------------------------------------------
 
@@ -493,17 +944,26 @@ StateMap = dict[str, dict[Property, Value]]
 
 
 class MotionSpec(IRModel):
-    """Root of the IR. Cross-references (element/segment/transition ids) are validated."""
+    """Root of the IR. Cross-references (element/segment/transition ids) are validated.
 
-    schema_version: Literal["0.1"] = SCHEMA_VERSION
+    ``mode`` selects the shape: ``transition`` (segments + transitions, PLAN §8) or
+    ``continuous`` (one scroller in ``continuous``; no segments/transitions/relationships).
+    """
+
+    schema_version: SchemaVersion = SCHEMA_VERSION
     job_id: JobId
     meta: Meta
+    mode: SpecMode = "transition"
     source: Source
+    scene: Scene | None = Field(default=None, exclude_if=_omit_if_none)
     interaction: Interaction
     elements: list[MotionElement]
-    segments: list[Segment] = Field(min_length=1)
+    segments: list[Segment] = Field(
+        description="Transition mode: >= 1 segment. Continuous mode: empty."
+    )
     transitions: list[Transition]
     relationships: list[Relationship] = Field(default_factory=list)
+    continuous: ContinuousMotion | None = Field(default=None, exclude_if=_omit_if_none)
     cursor: Cursor
     structure: list[str] = Field(default_factory=list)
     interpretation: Interpretation
@@ -544,6 +1004,47 @@ class MotionSpec(IRModel):
     # ---- integrity ------------------------------------------------------------------------
 
     @model_validator(mode="after")
+    def _check_mode(self) -> MotionSpec:
+        """``mode == continuous`` <=> ``continuous`` set <=> direction ``continuous`` <=>
+        interaction type in ``CONTINUOUS_INTERACTION_TYPES`` (PLAN-continuous §5.2)."""
+        continuous = self.mode == "continuous"
+        checks = {
+            "continuous section": self.continuous is not None,
+            'interaction.direction "continuous"': self.interaction.direction == "continuous",
+            "interaction.type continuous|drag": (
+                self.interaction.type in CONTINUOUS_INTERACTION_TYPES
+            ),
+        }
+        for what, present in checks.items():
+            if present != continuous:
+                raise ValueError(
+                    f"mode {self.mode!r} {'requires' if continuous else 'forbids'} {what}"
+                )
+        if not continuous:
+            if not self.segments:
+                raise ValueError("transition mode needs at least one segment")
+            return self
+        assert self.continuous is not None
+        c = self.continuous
+        if self.schema_version != SCHEMA_VERSION:
+            raise ValueError(f"continuous mode needs schema_version {SCHEMA_VERSION!r}")
+        if self.segments or self.transitions or self.relationships:
+            raise ValueError("continuous mode needs empty segments, transitions, relationships")
+        scroller = next((e for e in self.elements if e.id == c.element_id), None)
+        if scroller is None or scroller.kind != "scroller":
+            raise ValueError("continuous.element_id must be an element with kind 'scroller'")
+        if self.interaction.target_element_id != c.element_id:
+            raise ValueError("continuous mode: interaction.target_element_id must be the scroller")
+        total = self.interaction.total_duration_ms
+        if total.reverse is not None or total.forward != c.span_ms.end_ms - c.span_ms.start_ms:
+            raise ValueError(
+                "continuous mode: total_duration_ms.forward = analysed span, reverse = null"
+            )
+        if (self.interaction.type == "drag") != (c.behavior.drag is not None):
+            raise ValueError('interaction.type "drag" <=> behavior.drag is set')
+        return self
+
+    @model_validator(mode="after")
     def _check_refs(self) -> MotionSpec:
         el_ids = [e.id for e in self.elements]
         if len(set(el_ids)) != len(el_ids):
@@ -556,10 +1057,11 @@ class MotionSpec(IRModel):
         seg_ids = [s.id for s in self.segments]
         if len(set(seg_ids)) != len(seg_ids):
             raise ValueError("duplicate segment ids")
-        expected_segs = {
+        expected_segs: set[str] = {
             "forward": {"fwd"},
             "forward_reverse": {"fwd", "rev"},
             "round_trip": {"rt_in", "rt_out"},
+            "continuous": set(),
         }[self.interaction.direction]
         if set(seg_ids) != expected_segs:
             raise ValueError(
@@ -600,38 +1102,64 @@ class MotionSpec(IRModel):
 __all__ = [
     "BAND_HIGH_MIN",
     "BAND_MEDIUM_MIN",
+    "CONTINUOUS_INTERACTION_TYPES",
+    "CONTINUOUS_ROLES",
+    "CONTINUOUS_SAMPLE_MAX",
     "CSS_KEYWORD_BEZIER",
     "DISCLAIMER",
+    "PHASE_FIT_MODELS",
+    "PHASE_KINDS",
     "PROPERTY_VALUE_KIND",
     "SCHEMA_VERSION",
+    "SIGN_CONVENTION",
     "UNCERTAIN_BELOW",
+    "Autoplay",
+    "Behavior",
     "Box",
+    "CardScale",
     "ColorValue",
     "Confidence",
+    "ConstantFit",
+    "ContinuousMotion",
     "Cursor",
     "CursorEvent",
+    "DragBehavior",
     "Easing",
+    "ExponentialFit",
+    "InertiaBehavior",
+    "LoopInfo",
     "MotionElement",
     "ElementStatic",
     "Interaction",
     "Interpretation",
+    "MeasuredColor",
     "MeasuredNumber",
     "MeasuredShadow",
     "Meta",
     "MotionSpec",
+    "PauseBehavior",
+    "Phase",
+    "PhaseFit",
     "PxValue",
+    "RampFit",
     "RatioValue",
     "Relationship",
+    "ResumeBehavior",
+    "Scene",
     "Segment",
     "Shadow",
     "ShadowValue",
+    "Size",
+    "SnapBehavior",
     "Source",
+    "Span",
     "SpecWarning",
     "TextValue",
     "TotalDuration",
     "Transition",
     "TransitionConfidence",
     "Trigger",
+    "TweenFit",
     "Value",
     "band_for",
 ]

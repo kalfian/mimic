@@ -1,11 +1,14 @@
 """Track G: generators (PLAN §9, §11.1(5)).
 
-* Snapshots of the 4 outputs for ``docs/contract/sample-result.json`` and a low-confidence
-  variant (``UPDATE_SNAPSHOTS=1 uv run pytest tests/unit/test_generators.py`` to rewrite).
+* Snapshots of the 4 outputs for ``docs/contract/sample-result.json``, a low-confidence
+  variant and a measured-appearance variant (PLAN-continuous §13)
+  (``UPDATE_SNAPSHOTS=1 uv run pytest tests/unit/test_generators.py`` to rewrite).
 * Determinism: same spec -> byte-identical text, also after a JSON round trip.
 * Number provenance: every number printed in Technical / LLM prompt / CSS maps to an IR value
   (after abs / display rounding / x100 for confidences).
 * Low-confidence wording and omissions, PRD §18/§19/§21 structure, selector variants.
+* Measured appearance: absent → byte-identical outputs (the sample / low-confidence snapshots
+  predate it); present → APPEARANCE block / section, CSS size + colour declarations.
 """
 
 from __future__ import annotations
@@ -219,6 +222,41 @@ def _subsampled(s: dict[str, Any]) -> None:
     })  # fmt: skip
 
 
+def _mc(value: str, conf: float) -> dict[str, Any]:
+    return {"value": value, "confidence": {"value": conf, "band": phrasing.band_for(conf)}}
+
+
+def _mn(value: float, conf: float) -> dict[str, Any]:
+    return {"value": value, "confidence": {"value": conf, "band": phrasing.band_for(conf)}}
+
+
+def appearance_spec_dict() -> dict[str, Any]:
+    """Sample + measured appearance (PLAN-continuous §13): scene, fills, text colour, font sizes,
+    and a static text element (no transitions) that only the appearance outputs mention."""
+    s = sample_spec_dict()
+    s["scene"] = {"viewport_css": {"w": 1440.0, "h": 900.0},
+                  "page_background": _mc("#F3F4F6", 0.85)}  # fmt: skip
+    st = {e["id"]: e["static"] for e in s["elements"]}
+    st["e1"]["background_color"] = _mc("#FFFFFF", 0.85)
+    st["e2"]["background_color"] = _mc("#C7D2FE", 0.38)  # low band -> "possibly"
+    st["e3"]["text_color"] = _mc("#111111", 0.8)  # animated (t3 color): left to the steps
+    st["e3"]["font_size_px"] = _mn(17.8, 0.45)
+    s["elements"].append({
+        "id": "e5", "label": "Card description", "label_source": "interpreter", "role": "text",
+        "parent_id": "e1", "kind": "transform",
+        "bbox_initial": {"x": 584.0, "y": 508.0, "w": 272.0, "h": 40.0},
+        "bbox_active": {"x": 584.0, "y": 500.0, "w": 272.0, "h": 40.0},
+        "text_like": True,
+        "static": {"border_radius_px": None, "shadow": None,
+                   "text_color": _mc("#6B7280", 0.72), "font_size_px": _mn(14.2, 0.5)},
+    })  # fmt: skip
+    return s
+
+
+def appearance_spec() -> MotionSpec:
+    return MotionSpec.model_validate(appearance_spec_dict())
+
+
 VARIANTS: dict[str, Callable[[], MotionSpec]] = {
     "sample": sample_spec,
     "low_confidence": low_confidence_spec,
@@ -230,14 +268,16 @@ VARIANTS: dict[str, Callable[[], MotionSpec]] = {
     "height": lambda: _variant(_height),
     "overshoot": lambda: _variant(_overshoot),
     "subsampled": lambda: _variant(_subsampled),
+    "appearance": appearance_spec,
 }
+SNAPSHOT_VARIANTS = ["sample", "low_confidence", "appearance"]
 
 # --------------------------------------------------------------------------------------------
 # Snapshots + determinism
 # --------------------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("variant", ["sample", "low_confidence"])
+@pytest.mark.parametrize("variant", SNAPSHOT_VARIANTS)
 @pytest.mark.parametrize("key", list(OUTPUT_FILES))
 def test_snapshot(variant: str, key: str) -> None:
     out = render_all(VARIANTS[variant]()).model_dump()[key]
@@ -331,6 +371,24 @@ def allowed_numbers(spec: MotionSpec) -> set[float]:
     return allowed
 
 
+def offset_numbers(spec: MotionSpec) -> set[float]:
+    """APPEARANCE positions are relative to the parent (PLAN-continuous §13): child box − parent
+    box, state A (active box when the state-A box is empty). The only derived magnitude the
+    generators may print; computed here independently of ``technical.parent_offset``."""
+
+    def box(e: Any) -> Any:
+        b = e.bbox_initial
+        return b if b.w > 0 and b.h > 0 else e.bbox_active
+
+    by_id = {e.id: e for e in spec.elements}
+    out: set[float] = set()
+    for e in spec.elements:
+        if e.parent_id in by_id:
+            b, pb = box(e), box(by_id[e.parent_id])
+            out |= _forms(b.x - pb.x, False) | _forms(b.y - pb.y, False)
+    return out
+
+
 def unexplained_numbers(text: str, allowed: set[float], extra: set[float] = frozenset()) -> list:
     ok = allowed | set(extra)
     return [n for n in _numbers_in(text) if round(n, 6) not in ok]
@@ -342,7 +400,8 @@ def test_number_provenance(variant: str, key: str) -> None:
     spec = VARIANTS[variant]()
     text = render_all(spec).model_dump()[key]
     extra = EXTRA_LITERALS.get(key, set())
-    assert unexplained_numbers(text, allowed_numbers(spec), extra) == []
+    allowed = allowed_numbers(spec) | offset_numbers(spec)
+    assert unexplained_numbers(text, allowed, extra) == []
 
 
 def test_provenance_check_catches_invented_numbers() -> None:
@@ -784,3 +843,136 @@ def test_class_names_bem_and_collisions() -> None:
     ]
     fallback = phrasing.class_names(low_confidence_spec())
     assert fallback["e1"] == "card" and fallback["e2"] == "card__image"
+
+
+# --------------------------------------------------------------------------------------------
+# Measured appearance (PLAN-continuous §13)
+# --------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("variant", [v for v in VARIANTS if v != "appearance"])
+def test_no_appearance_no_new_text(variant: str) -> None:
+    spec = VARIANTS[variant]()
+    assert not technical.has_appearance(spec)
+    out = render_all(spec)
+    assert "APPEARANCE" not in out.llm_prompt and "APPEARANCE" not in out.technical
+    assert "- Appearance:" not in out.llm_prompt
+    assert "width:" not in out.css and "body {" not in out.css
+
+
+def test_has_appearance_triggers() -> None:
+    def scene_only(s: dict[str, Any]) -> None:
+        s["scene"] = {"viewport_css": {"w": 1440.0, "h": 900.0}, "page_background": None}
+
+    def font_only(s: dict[str, Any]) -> None:
+        s["elements"][2]["static"]["font_size_px"] = _mn(16.0, 0.4)
+
+    for mutate in (scene_only, font_only):
+        spec = _variant(mutate)
+        assert technical.has_appearance(spec)
+        assert "\nAPPEARANCE (measured, approximate)\n" in llm_prompt.render(spec)
+    prompt = llm_prompt.render(_variant(font_only))
+    assert "Recorded viewport" not in prompt and "Page background" not in prompt
+
+
+def _appearance_block(text: str) -> str:
+    return text.split("\nAPPEARANCE (measured, approximate)\n", 1)[1].split("\nINTERACTION\n")[0]
+
+
+def test_prompt_appearance_block() -> None:
+    text = llm_prompt.render(appearance_spec())
+    pos = _section_order(
+        text, ["STRUCTURE", "APPEARANCE (measured, approximate)", "INTERACTION", "OUTPUT"]
+    )
+    assert pos == sorted(pos)
+    block = _appearance_block(text)
+    for needle in (
+        "- Recorded viewport: 1440 x 900px.",
+        "- Page background: approximately #F3F4F6.",
+        "- Product card: 320 x 400px, placed 560px from the left and 240px from the top of the "
+        "viewport; background approximately #FFFFFF; corner radius possibly 12px (low "
+        "confidence).",
+        "- Product image: 320 x 200px, at the top-left corner of the product card; background "
+        "possibly #C7D2FE (low confidence).",
+        "- Card title: 240 x 28px, placed 24px from the left and 228px from the top of the "
+        "product card; font size possibly 18px (low confidence).",
+        "- Arrow icon: 20 x 20px, placed 276px from the left and 356px from the top of the "
+        "product card.",
+        "- Card description: 272 x 40px, placed 24px from the left and 268px from the top of the "
+        "product card; text color approximately #6B7280 (medium confidence); font size "
+        "approximately 14px (medium confidence).",
+    ):
+        assert needle in block, needle
+    # animated properties are described by the steps, not repeated as static values
+    assert "#111111" not in block and "shadow" not in block
+
+
+def test_prompt_appearance_output_bullet() -> None:
+    out = _output_section(llm_prompt.render(appearance_spec()))
+    bullet = next(ln for ln in out.splitlines() if ln.startswith("- Appearance:"))
+    for needle in (
+        "match the sizes, positions, colors, corner radii, shadows and font sizes",
+        "Keep that measured layout at the recorded viewport width and wider",
+        "reflow responsively below it",
+        "system sans-serif stack",
+        "Content stays placeholder",
+    ):
+        assert needle in bullet, needle
+    lines = out.splitlines()
+    assert lines.index(bullet) == next(i for i, ln in enumerate(lines) if ln.startswith(
+        "- Layout:")) + 1  # fmt: skip
+
+
+def test_technical_appearance_section() -> None:
+    text = technical.render(appearance_spec())
+    pos = _section_order(
+        text, ["INTERACTION", "APPEARANCE (initial state, measured)", "PRODUCT CARD (e1)", "NOTES"]
+    )
+    assert pos == sorted(pos)
+    sec = text.split("\nAPPEARANCE (initial state, measured)\n", 1)[1].split(
+        "\nPRODUCT CARD (e1)\n")[0]  # fmt: skip
+    for needle in (
+        "Viewport: 1440 x 900px (recorded frame, CSS px)",
+        "Page background: approximately #F3F4F6 — high confidence (85%)",
+        "Product card (e1): 320 x 400px at x 560px, y 240px in the viewport",
+        "  Background: approximately #FFFFFF — high confidence (85%)",
+        "  Border radius: possibly 12px — low confidence (45%)",
+        "Card title (e3): 240 x 28px at x 24px, y 228px inside Product card (e1)",
+        "  Font size: possibly 18px — low confidence (45%)",
+        "Card description (e5): 272 x 40px at x 24px, y 268px inside Product card (e1)",
+    ):
+        assert needle in sec, needle
+    assert "Shadow" not in sec  # e1 animates box-shadow
+    assert "(static)" not in text  # radius / shadow moved into APPEARANCE
+
+
+def test_css_appearance_declarations() -> None:
+    text = css.render(appearance_spec())
+    assert "/* Sizes and colors measured at the recorded 1440 x 900px viewport. */" in text
+    assert "body {\n  background-color: #F3F4F6; /* estimated, high confidence */\n}" in text
+    card = text.split(".product-card {\n", 1)[1].split("}", 1)[0]
+    assert card.startswith(
+        "  width: 320px;\n  height: 400px;\n"
+        "  background-color: #FFFFFF; /* estimated, high confidence */\n"
+        "  border-radius: 12px; /* estimated, low confidence */\n"
+    )
+    title = text.split(".product-card__title {\n", 1)[1].split("}", 1)[0]
+    assert "width" not in title and "height" not in title  # text boxes follow their text
+    assert "  font-size: 18px; /* estimated, low confidence */" in title
+    assert title.count("color:") == 1  # the animated colour only (from the transition)
+    # a static element (no transitions) gets a base rule from its appearance alone
+    assert (
+        ".product-card__description {\n"
+        "  color: #6B7280; /* estimated, medium confidence */\n"
+        "  font-size: 14px; /* estimated, medium confidence */\n}"
+    ) in text
+    assert ".product-card:hover .product-card__description" not in text
+    assert text.count("{") == text.count("}")
+
+
+def test_appearance_keeps_motion_text_identical() -> None:
+    """Appearance adds text; it never changes the motion description."""
+    base = llm_prompt.render(sample_spec())
+    with_app = llm_prompt.render(appearance_spec())
+    steps = base.split("\nINTERACTION\n", 1)[1].split("\nOUTPUT\n")[0]
+    assert steps in with_app

@@ -1,0 +1,291 @@
+{
+  "schema_version": "0.2",
+  "job_id": "7c41e2a95b0d4f3e8a6c1b2d3e4f5a6b",
+  "meta": {
+    "generated_at": "2026-10-03T10:00:00Z",
+    "pipeline_version": "0.1.0",
+    "estimated": true,
+    "disclaimer": "Values are visual estimates from a screen recording, not source CSS."
+  },
+  "mode": "continuous",
+  "source": {
+    "filename": "carousel-drag.mov",
+    "container": "mov",
+    "codec": "h264",
+    "width": 1280,
+    "height": 800,
+    "duration_ms": 9300,
+    "fps_nominal": 60.0,
+    "fps_effective": 55.7,
+    "is_vfr": true,
+    "pixel_ratio": 1,
+    "pixel_ratio_source": "auto",
+    "timing_resolution_ms": 18
+  },
+  "scene": {
+    "viewport_css": {
+      "w": 1280.0,
+      "h": 800.0
+    },
+    "page_background": {
+      "value": "#FAFAFA",
+      "confidence": {
+        "value": 0.8,
+        "band": "high"
+      }
+    }
+  },
+  "interaction": {
+    "type": "continuous",
+    "type_source": "heuristic",
+    "type_confidence": {
+      "value": 0.85,
+      "band": "high"
+    },
+    "pattern": "marquee",
+    "target_element_id": "e1",
+    "target_label": "Scroller (e1)",
+    "target_description": null,
+    "trigger": {
+      "kind": "autoplay",
+      "reverse_kind": "none",
+      "description": "Logo strip that scrolls on its own; no interaction recorded.",
+      "confidence": {
+        "value": 0.9,
+        "band": "high"
+      }
+    },
+    "direction": "continuous",
+    "total_duration_ms": {
+      "forward": 8000,
+      "reverse": null
+    }
+  },
+  "elements": [
+    {
+      "id": "e1",
+      "label": "Scroller (e1)",
+      "label_source": "heuristic",
+      "role": "scroller",
+      "parent_id": null,
+      "kind": "scroller",
+      "bbox_initial": {
+        "x": 260.0,
+        "y": 300.0,
+        "w": 760.0,
+        "h": 200.0
+      },
+      "bbox_active": {
+        "x": 260.0,
+        "y": 300.0,
+        "w": 760.0,
+        "h": 200.0
+      },
+      "text_like": false,
+      "static": {
+        "border_radius_px": null,
+        "shadow": null,
+        "background_color": {
+          "value": "#F1F1F4",
+          "confidence": {
+            "value": 0.7,
+            "band": "medium"
+          }
+        }
+      }
+    },
+    {
+      "id": "e2",
+      "label": "Card (e2)",
+      "label_source": "heuristic",
+      "role": "card",
+      "parent_id": "e1",
+      "kind": "transform",
+      "bbox_initial": {
+        "x": 268.0,
+        "y": 320.0,
+        "w": 200.0,
+        "h": 160.0
+      },
+      "bbox_active": {
+        "x": 268.0,
+        "y": 320.0,
+        "w": 200.0,
+        "h": 160.0
+      },
+      "text_like": false,
+      "static": {
+        "border_radius_px": {
+          "value": 12.0,
+          "confidence": {
+            "value": 0.45,
+            "band": "low"
+          }
+        },
+        "shadow": null,
+        "background_color": {
+          "value": "#FFFFFF",
+          "confidence": {
+            "value": 0.75,
+            "band": "medium"
+          }
+        }
+      }
+    },
+    {
+      "id": "e3",
+      "label": "Text (e3)",
+      "label_source": "heuristic",
+      "role": "title",
+      "parent_id": "e2",
+      "kind": "transform",
+      "bbox_initial": {
+        "x": 284.0,
+        "y": 440.0,
+        "w": 120.0,
+        "h": 20.0
+      },
+      "bbox_active": {
+        "x": 284.0,
+        "y": 440.0,
+        "w": 120.0,
+        "h": 20.0
+      },
+      "text_like": true,
+      "static": {
+        "border_radius_px": null,
+        "shadow": null,
+        "text_color": {
+          "value": "#1A1A1A",
+          "confidence": {
+            "value": 0.6,
+            "band": "medium"
+          }
+        },
+        "font_size_px": {
+          "value": 16.0,
+          "confidence": {
+            "value": 0.35,
+            "band": "low"
+          }
+        }
+      }
+    }
+  ],
+  "segments": [],
+  "transitions": [],
+  "relationships": [],
+  "continuous": {
+    "element_id": "e1",
+    "axis": "x",
+    "region": {
+      "x": 260.0,
+      "y": 300.0,
+      "w": 760.0,
+      "h": 200.0
+    },
+    "region_confidence": {
+      "value": 0.7,
+      "band": "medium"
+    },
+    "sign_convention": "positive = content moves right (x) / down (y)",
+    "autoplay": {
+      "direction": "left",
+      "speed_px_s": {
+        "value": 240.0,
+        "confidence": {
+          "value": 0.92,
+          "band": "high"
+        }
+      },
+      "velocity_px_s": -240.0,
+      "easing": "linear",
+      "loop": {
+        "observed": true,
+        "period_px": {
+          "value": 864.0,
+          "confidence": {
+            "value": 0.9,
+            "band": "high"
+          }
+        },
+        "duration_ms": {
+          "value": 3600.0,
+          "confidence": {
+            "value": 0.88,
+            "band": "high"
+          }
+        }
+      }
+    },
+    "pitch_px": {
+      "value": 216.0,
+      "confidence": {
+        "value": 0.75,
+        "band": "medium"
+      }
+    },
+    "gap_px": {
+      "value": 16.0,
+      "confidence": {
+        "value": 0.6,
+        "band": "medium"
+      }
+    },
+    "phases": [
+      {
+        "id": "p1",
+        "kind": "autoplay",
+        "start_ms": 0,
+        "end_ms": 8000,
+        "v_start_px_s": -240.0,
+        "v_end_px_s": -240.0,
+        "v_peak_px_s": -240.0,
+        "displacement_px": -1920.0,
+        "fit": {
+          "model": "constant",
+          "velocity_px_s": {
+            "value": -240.0,
+            "confidence": {
+              "value": 0.92,
+              "band": "high"
+            }
+          }
+        },
+        "interrupted": false,
+        "evidence": "velocity",
+        "confidence": {
+          "value": 0.92,
+          "band": "high"
+        },
+        "notes": []
+      }
+    ],
+    "behavior": {
+      "pause": null,
+      "drag": null,
+      "inertia": null,
+      "snap": null,
+      "resume": null
+    },
+    "span_ms": {
+      "start_ms": 0,
+      "end_ms": 8000
+    }
+  },
+  "cursor": {
+    "visible": false,
+    "confidence": 0.0,
+    "events": []
+  },
+  "structure": [],
+  "interpretation": {
+    "provider": "none",
+    "model": null,
+    "status": "disabled",
+    "duration_ms": null
+  },
+  "warnings": [],
+  "initial_state": {},
+  "active_state": {}
+}

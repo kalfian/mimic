@@ -2,12 +2,26 @@
 
 The prompt asks the coding LLM for one self-contained, responsive ``index.html`` (OUTPUT
 section) built with neutral placeholders; the motion numbers stay where they were measured.
+
+Measured appearance (PLAN-continuous §13): when the spec carries ``scene`` or element
+appearance values, an "APPEARANCE (measured, approximate)" block follows STRUCTURE (viewport,
+page background, per element size + position relative to its parent, colours, radius, shadow,
+font size, each hedged by its confidence band) and OUTPUT gains an Appearance bullet. Without
+those fields the prompt is byte-identical to before.
 """
 
 from __future__ import annotations
 
 from app.generate import phrasing as ph
-from app.models.ir import MotionElement, MotionSpec, Transition
+from app.generate.phrasing import (
+    MIN_VIEWPORT_PX,
+    animated_props,
+    appearance_box,
+    has_appearance,
+    parent_offset,
+    size_text,
+)
+from app.models.ir import MeasuredColor, MeasuredNumber, MotionElement, MotionSpec, Transition
 
 OPENING_LINE = (
     "Recreate the reference UI interaction as a single self-contained, responsive HTML file,"
@@ -119,6 +133,81 @@ def _structure(spec: MotionSpec) -> list[str]:
     if (spec.structure or outside) and animated:
         lines += ["", f"Animated elements referenced below: {', '.join(animated)}."]
     return lines
+
+
+# --------------------------------------------------------------------------------------------
+# APPEARANCE (measured, approximate) — PLAN-continuous §13
+# --------------------------------------------------------------------------------------------
+
+
+def _hedged(value: str, band: str) -> str:
+    """``approximately #FFFFFF`` / ``approximately 18px (medium confidence)`` / ``possibly …``."""
+    return f"{ph.value_prefix(band)}{value}{ph.band_note(band)}"  # type: ignore[arg-type]
+
+
+def _color(c: MeasuredColor) -> str:
+    return _hedged(c.value, c.confidence.band)
+
+
+def _length(n: MeasuredNumber) -> str:
+    return _hedged(ph.px(n.value), n.confidence.band)
+
+
+def _position(spec: MotionSpec, el: MotionElement) -> str:
+    x, y, parent = parent_offset(spec, el)
+    ref = "the viewport" if parent is None else f"the {ph.ref_name(parent)}"
+    if ph.num_px(x) == "0" and ph.num_px(y) == "0":
+        return f"at the top-left corner of {ref}"
+    return f"placed {ph.px(x)} from the left and {ph.px(y)} from the top of {ref}"
+
+
+def _appearance_line(spec: MotionSpec, el: MotionElement) -> str:
+    st = el.static
+    animated = animated_props(spec, el.id)
+    parts = [f"{size_text(appearance_box(el))}, {_position(spec, el)}"]
+    if st.background_color is not None and "background-color" not in animated:
+        parts.append(f"background {_color(st.background_color)}")
+    if st.text_color is not None and "color" not in animated:
+        parts.append(f"text color {_color(st.text_color)}")
+    if st.font_size_px is not None:
+        parts.append(f"font size {_length(st.font_size_px)}")
+    if st.border_radius_px is not None and "border-radius" not in animated:
+        parts.append(f"corner radius {_length(st.border_radius_px)}")
+    sh = st.shadow
+    if sh is not None and sh.value is not None and "box-shadow" not in animated:
+        parts.append(f"shadow {_hedged(ph.shadow_css(sh.value), sh.confidence.band)}")
+    return f"- {ph.upper_first(ph.ref_name(el))}: " + "; ".join(parts) + "."
+
+
+def _appearance(spec: MotionSpec) -> list[str]:
+    lines = [
+        "APPEARANCE (measured, approximate)",
+        "",
+        "Measured from the recording in the initial state, in CSS px; values the interaction "
+        "animates are given with the steps below instead.",
+    ]
+    sc = spec.scene
+    if sc is not None:
+        lines.append(
+            f"- Recorded viewport: {ph.num_px(sc.viewport_css.w)} x "
+            f"{ph.num_px(sc.viewport_css.h)}px."
+        )
+        if sc.page_background is not None:
+            lines.append(f"- Page background: {_color(sc.page_background)}.")
+    lines += [_appearance_line(spec, el) for el in ph.element_order(spec)]
+    return lines
+
+
+def _appearance_bullet() -> str:
+    return (
+        "- Appearance: match the sizes, positions, colors, corner radii, shadows and font sizes "
+        "listed under APPEARANCE as closely as you can; they were measured from the recording, "
+        "so use them instead of your own styling. Keep that measured layout at the recorded "
+        "viewport width and wider, and reflow responsively below it as described under Layout. "
+        "Fonts are not identified: use a system sans-serif stack at the measured sizes. Content "
+        "stays placeholder: give the placeholder blocks and text the measured colors, but do not "
+        "try to reproduce real images, icons or copy."
+    )
 
 
 def _target_sentence(spec: MotionSpec) -> str:
@@ -336,10 +425,6 @@ def _uncertain(spec: MotionSpec) -> list[str]:
 # OUTPUT: the deliverable asked of the coding LLM (one self-contained, responsive HTML file)
 # --------------------------------------------------------------------------------------------
 
-#: Narrowest viewport the HTML must support. The only number in OUTPUT that does not come from
-#: the IR (generic layout guidance; allow-listed explicitly by the provenance test).
-MIN_VIEWPORT_PX = 320
-
 #: Properties that move or resize an element: dropped / made instant under reduced motion.
 _MOTION_NOUN = {
     "translateX": "movement",
@@ -461,23 +546,21 @@ def _reduced_motion_bullet(spec: MotionSpec) -> str:
 
 
 def _output(spec: MotionSpec) -> list[str]:
-    return [
+    lines = [
         "OUTPUT",
         "",
-        "Build this as one self-contained, responsive HTML file named index.html: the markup, "
-        "one <style> block and, only if the interaction needs it, one inline <script>. No "
-        "frameworks, CDNs, external fonts, external images or build step; the file must work "
-        "when opened directly in a browser.",
+        ph.html_file_sentence("interaction"),
         "",
-        "- Content: build only the structure above, with neutral placeholders instead of real "
-        "images or copy: images as a solid or gradient block with a fixed aspect-ratio, text as "
-        'short role-named or lorem-style text (for example "Title", "Description"), icons as a '
-        "simple inline SVG. Do not add UI beyond what is needed to demonstrate the interaction.",
+        ph.content_bullet("interaction"),
         "- Layout: mobile-first and fluid (max-width with percentages or clamp()), working from "
         f"{MIN_VIEWPORT_PX}px wide phones to wide desktops, with the standard responsive "
         '<meta name="viewport"> tag. The layout may reflow (for example a row of cards '
         "collapses to one column), but keep every motion value above as specified in CSS px "
         "and ms: they are measured design values, so do not scale them with the viewport.",
+    ]
+    if has_appearance(spec):
+        lines.append(_appearance_bullet())
+    return lines + [
         _motion_bullet(spec),
         _input_bullet(spec),
         _reduced_motion_bullet(spec),
@@ -494,6 +577,8 @@ def render(spec: MotionSpec) -> str:
         *_structure(spec),
         "",
     ]
+    if has_appearance(spec):
+        out += [*_appearance(spec), ""]
     out += ["INTERACTION", "", _target_sentence(spec)]
     if it.type_confidence.band != "high":
         type_word = ph.TYPE_TITLE[it.type].lower()

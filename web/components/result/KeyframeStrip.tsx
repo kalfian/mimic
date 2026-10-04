@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { assetUrl } from "@/lib/api";
 import type { KeyframeArtifact, KeyframeKind, MotionElement, Source } from "@/lib/types";
+import type { VelocityBand } from "@/lib/velocity";
 
 const SEQUENCE: { kind: KeyframeKind; annotated?: KeyframeKind; label: string }[] = [
   { kind: "state_a", annotated: "annotated_a", label: "A · start" },
@@ -73,18 +74,26 @@ export function KeyframeStrip({
   source,
   playheadMs,
   onSeek,
+  phaseOf,
 }: {
   keyframes: KeyframeArtifact[];
   elements: MotionElement[];
   source: Source;
   playheadMs: number;
   onSeek: (ms: number) => void;
+  /**
+   * Continuous mode: the phase (chart band) at a keyframe's time, `bandForKeyframe` bound to the
+   * velocity model. Phase frames share one kind, so they are listed one by one, never keyed by kind.
+   */
+  phaseOf?: (t_ms: number | null) => VelocityBand | null;
 }) {
   const [annotated, setAnnotated] = useState(false);
   const [failed, setFailed] = useState<Record<string, boolean>>({});
   const byKind = new Map(keyframes.map((k) => [k.kind, k]));
   const hasAnnotated = byKind.has("annotated_a") || byKind.has("annotated_b");
   const crops = keyframes.filter((k) => k.kind === "element");
+  const phaseFrames = keyframes.filter((k) => k.kind === "phase").sort((a, b) => (a.t_ms ?? Infinity) - (b.t_ms ?? Infinity));
+  const playPhase = phaseOf ? phaseOf(playheadMs) : null;
   const aspect = `${source.width} / ${source.height}`;
   const fail = (name: string) => () => setFailed((f) => ({ ...f, [name]: true }));
 
@@ -108,7 +117,7 @@ export function KeyframeStrip({
 
   return (
     <Panel id="keyframes" title="Keyframes" meta={meta}>
-      {frames.length === 0 && crops.length === 0 ? (
+      {frames.length === 0 && crops.length === 0 && phaseFrames.length === 0 ? (
         <p className="text-sm text-ink-3">No keyframes were produced for this analysis.</p>
       ) : (
         <div className="space-y-5">
@@ -126,6 +135,25 @@ export function KeyframeStrip({
                   active={near?.name === f.frame.name}
                 />
               ))}
+            </div>
+          ) : null}
+          {phaseFrames.length > 0 ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              {phaseFrames.map((k, i) => {
+                const band = phaseOf ? phaseOf(k.t_ms) : null;
+                return (
+                  <Thumb
+                    key={k.name}
+                    frame={k}
+                    label={`${i + 1} · ${band?.label ?? "Phase"}`}
+                    aspect={aspect}
+                    failed={Boolean(failed[k.name])}
+                    onFail={fail(k.name)}
+                    onSeek={onSeek}
+                    active={band != null && band.phase_id === playPhase?.phase_id}
+                  />
+                );
+              })}
             </div>
           ) : null}
           {crops.length > 0 ? (

@@ -35,6 +35,7 @@ const BACKEND_CODE_SET: Record<ErrorCode, true> = {
   no_motion_detected: true,
   unsupported_motion: true,
   no_stable_state: true,
+  continuous_motion_unsupported: true,
   internal_error: true,
   interrupted: true,
   not_found: true,

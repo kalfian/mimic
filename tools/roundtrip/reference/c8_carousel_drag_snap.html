@@ -1,0 +1,32 @@
+<!doctype html>
+<!-- C8 carousel_drag_snap truth: autoplay +40 px/s; press stops it; drag 1:1; release -> tween to the next card (grid 216 px, at least 54 px ahead in the release direction) over 300 ms ease-out; rest 1000 ms -> resume 750 ms ease-in-out. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C8 reference</title>
+<link rel="stylesheet" href="reference.css">
+</head>
+<body>
+  <div class="header"><span class="logo">Mimic Store</span>
+    <nav><span style="left:960px">Products</span><span style="left:1060px">Pricing</span><span style="left:1160px">About</span></nav></div>
+  <div class="sidebar">
+    <div class="row" style="top:26px"><span class="dot"></span><span class="label">Overview</span></div>
+    <div class="row" style="top:82px"><span class="dot"></span><span class="label">Products</span></div>
+    <div class="row" style="top:138px"><span class="dot"></span><span class="label">Orders</span></div>
+    <div class="row" style="top:194px"><span class="dot"></span><span class="label">Customers</span></div>
+    <div class="row" style="top:250px"><span class="dot"></span><span class="label">Reports</span></div>
+    <div class="row" style="top:306px"><span class="dot"></span><span class="label">Settings</span></div>
+  </div>
+  <div class="footer">Synthetic scene - Mimic test suite</div>
+  <div class="scroller is-draggable" aria-label="Carousel"><div class="track"></div></div>
+  <script src="scroller.js"></script>
+  <script>
+    const root = document.querySelector('.scroller');
+    RefScroller.buildCards(root.querySelector('.track'), 8, 2);
+    RefScroller.mountScroller(root, { axis: 'x', autoplay: 40, period: 1728, drag: true, releaseWindowMs: 50,
+        snap: { step: 216, minPx: 54, ms: 300, ease: [0, 0, 0.58, 1] },
+        resume: { delayAfterRestMs: 1000, delayAfterLeaveMs: null, rampMs: 750, ease: [0.42, 0, 0.58, 1] } });
+  </script>
+</body>
+</html>

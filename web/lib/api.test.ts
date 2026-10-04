@@ -233,3 +233,12 @@ describe("hostnames + session against the real client", () => {
     assert.equal(session.getSession().status, "authenticated");
   });
 });
+
+describe("getResult", () => {
+  it("fills spec.mode for stored schema 0.1 results", async () => {
+    const spec = { schema_version: "0.1", job_id: "a".repeat(32) };
+    responder = () => json(200, { job_id: "a".repeat(32), spec, outputs: {}, artifacts: { video_url: null, keyframes: [] } });
+    const env = await api.getResult("a".repeat(32));
+    assert.equal(env.spec.mode, "transition");
+  });
+});

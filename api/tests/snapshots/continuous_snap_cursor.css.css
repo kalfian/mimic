@@ -1,0 +1,47 @@
+/* Suggested implementation — estimated from a screen recording, not the original CSS. */
+/* All values are approximate; display scale assumed 2x. */
+/* Markup: .product-carousel > .product-carousel__track > the cards repeated twice (two identical copies) for a seamless loop. */
+/* Autoplay, dragging, and snapping need the JS driver (JS tab); these rules are layout only. */
+
+body {
+  background-color: #FFFFFF; /* estimated, high confidence */
+}
+
+.product-carousel {
+  display: flex;
+  align-items: center;
+  max-width: 1200px; /* estimated, medium confidence */
+  height: 240px; /* estimated, medium confidence */
+  margin-inline: auto;
+  overflow: hidden;
+  touch-action: pan-y; /* page scroll stays on the other axis */
+  user-select: none;
+  cursor: grab;
+}
+
+.product-carousel:active {
+  cursor: grabbing;
+}
+
+.product-carousel__track {
+  display: flex;
+  flex: none;
+  gap: calc(216px - 200px); /* estimated, high confidence */
+  /* gap not measured: card pitch minus card size */
+  width: max-content;
+  will-change: translate;
+}
+
+.product-carousel__card {
+  flex: none;
+  width: 200px;
+  height: 160px;
+  background-color: #F4F4F6; /* estimated, high confidence */
+  border-radius: 8px; /* estimated, medium confidence */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); /* estimated, medium confidence */
+}
+
+.product-carousel__title {
+  /* uncertain (20% confidence), omitted: color #222222 */
+  font-size: 14px; /* estimated, medium confidence */
+}

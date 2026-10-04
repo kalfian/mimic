@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { IconAlert, IconInfo } from "@/components/icons";
 import { Panel } from "@/components/ui/Panel";
 import { INTERPRETATION_STATUS_LABELS, WARNING_LABELS } from "@/lib/format";
+import { continuousOf } from "@/lib/spec";
 import type { MotionSpec, WarningSeverity } from "@/lib/types";
 
 interface Item {
@@ -50,14 +51,20 @@ export function collectWarnings(spec: MotionSpec): Item[] {
     });
   }
 
-  const total = spec.transitions.length;
-  const low = spec.transitions.filter((t) => t.confidence.band === "low").length;
+  // Transition results rate transitions; continuous results rate phases (empty `transitions`).
+  const phases = continuousOf(spec)?.phases ?? [];
+  const rated = phases.length > 0 ? phases.map((p) => p.confidence.band) : spec.transitions.map((t) => t.confidence.band);
+  const total = rated.length;
+  const low = rated.filter((b) => b === "low").length;
   if (total > 0 && low / total >= 0.5) {
     items.unshift({
       key: "mostly_low",
       severity: "warn",
       title: "Mostly low confidence",
-      message: `${low} of ${total} measurements are low confidence. Treat the numbers as rough; re-recording at 60 fps with the cursor visible usually helps.`,
+      message:
+        phases.length > 0
+          ? `${low} of ${total} phases are low confidence. Treat the numbers as rough; re-recording at 60 fps with the cursor visible and slower drags usually helps.`
+          : `${low} of ${total} measurements are low confidence. Treat the numbers as rough; re-recording at 60 fps with the cursor visible usually helps.`,
     });
   }
   return items;

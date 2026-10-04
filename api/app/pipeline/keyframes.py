@@ -7,6 +7,10 @@ scaled so the long side is ≤ ``params.keyframes.max_long_side``:
 * ``annotated_a`` / ``annotated_b``: element boxes + ids drawn with OpenCV
 * ``el_<id>.png``: A|B side-by-side crop per element (≤ ``max_element_crops``)
 
+Continuous mode (PLAN-continuous §9 P2, :func:`write_continuous_keyframes`): ``state_a`` (a rest
+frame when there is one), ``annotated_a`` (scroller / card / title boxes) and ``phase_<k>`` at
+phase midpoints (≤ ``MAX_PHASE_KEYFRAMES``).
+
 Names match ``api.schemas.KEYFRAME_NAME_RE``; kinds match ``KeyframeKind``.
 """
 
@@ -43,11 +47,20 @@ class KeyframeFile:
     path: Path
 
 
+#: Continuous mode: at most this many ``phase_<k>.png`` frames.
+MAX_PHASE_KEYFRAMES = 6
+
+
 def keyframe_size(probe: ProbeInfo, params: MeasureParams) -> tuple[int, int]:
     m = params.keyframes.max_long_side
     long = max(probe.width, probe.height)
     f = min(1.0, m / long)
     return max(2, int(round(probe.width * f / 2)) * 2), max(2, int(round(probe.height * f / 2)) * 2)
+
+
+def css_to_img(probe: ProbeInfo, scale: Scale, params: MeasureParams) -> float:
+    """Keyframe image px per CSS px."""
+    return keyframe_size(probe, params)[0] / (probe.width / scale.pixel_ratio)
 
 
 def grab_frame(
@@ -113,6 +126,68 @@ def element_crop(
     return out
 
 
+def _saver(out_dir: Path, files: list[KeyframeFile]):
+    def save(name: str, img: np.ndarray, kind: str, t: float | None, eid: str | None = None):
+        p = out_dir / name
+        if not cv2.imwrite(str(p), img):
+            raise PipelineError(
+                ErrorCode.INTERNAL_ERROR,
+                "The keyframe images could not be saved (is the disk full?).",
+            )
+        files.append(KeyframeFile(name, kind, t, eid, p))
+
+    return save
+
+
+def _grab_all(input_path: Path, times: dict, size: tuple[int, int], ffmpeg_bin: str) -> dict:
+    if not times:
+        return {}
+    with ThreadPoolExecutor(max_workers=len(times)) as pool:
+        futures = {k: pool.submit(grab_frame, input_path, t, size, ffmpeg_bin)
+                   for k, t in times.items()}  # fmt: skip
+        return {k: f.result() for k, f in futures.items()}
+
+
+def pick_phase_times(midpoints: list[float], limit: int = MAX_PHASE_KEYFRAMES) -> list[float]:
+    """At most ``limit`` phase midpoints, evenly spread over the list (time order kept)."""
+    n = len(midpoints)
+    if n <= limit:
+        return list(midpoints)
+    picks = sorted({round(i * (n - 1) / (limit - 1)) for i in range(limit)})
+    return [midpoints[i] for i in picks]
+
+
+def write_continuous_keyframes(
+    input_path: Path,
+    out_dir: Path,
+    probe: ProbeInfo,
+    scale: Scale,
+    *,
+    state_a_s: float,
+    phase_s: list[float],
+    boxes: list[tuple[str, Rect]],
+    params: MeasureParams,
+    ffmpeg_bin: str = "ffmpeg",
+    state_a_img: np.ndarray | None = None,
+) -> list[KeyframeFile]:
+    """Continuous-mode keyframes: ``state_a``, ``annotated_a`` (``boxes``), ``phase_<k>``."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    size = keyframe_size(probe, params)
+    k = size[0] / (probe.width / scale.pixel_ratio)
+    files: list[KeyframeFile] = []
+    save = _saver(out_dir, files)
+    times: dict = {i: t for i, t in enumerate(pick_phase_times(phase_s), start=1)}
+    if state_a_img is None:
+        times["a"] = state_a_s
+    grabbed = _grab_all(input_path, times, size, ffmpeg_bin)
+    img_a = state_a_img if state_a_img is not None else grabbed["a"]
+    save("state_a.png", img_a, "state_a", state_a_s)
+    save("annotated_a.png", annotate(img_a, boxes, k), "annotated_a", state_a_s)
+    for i in sorted(key for key in grabbed if isinstance(key, int)):
+        save(f"phase_{i}.png", grabbed[i], "phase", times[i])
+    return files
+
+
 def write_keyframes(
     input_path: Path,
     out_dir: Path,
@@ -125,29 +200,27 @@ def write_keyframes(
     elements: list[ElementCandidate],
     params: MeasureParams,
     ffmpeg_bin: str = "ffmpeg",
+    state_a_img: np.ndarray | None = None,
 ) -> list[KeyframeFile]:
-    """Write all A9 keyframes into ``out_dir`` and describe them (order = display order)."""
+    """Write all A9 keyframes into ``out_dir`` and describe them (order = display order).
+
+    ``state_a_img``: the frame at ``state_a_s`` already grabbed at :func:`keyframe_size` (the
+    appearance stage needs it too), reused instead of seeking again.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     size = keyframe_size(probe, params)
     css_to_img = size[0] / (probe.width / scale.pixel_ratio)
     files: list[KeyframeFile] = []
-
-    def save(name: str, img: np.ndarray, kind: str, t: float | None, eid: str | None = None):
-        p = out_dir / name
-        if not cv2.imwrite(str(p), img):
-            raise PipelineError(
-                ErrorCode.INTERNAL_ERROR,
-                "The keyframe images could not be saved (is the disk full?).",
-            )
-        files.append(KeyframeFile(name, kind, t, eid, p))
+    save = _saver(out_dir, files)
 
     # Independent ffmpeg seeks: run them concurrently (each is mostly process start + seek).
     times = {"a": state_a_s, "b": state_b_s} | {pct: mid_s[pct] for pct in (25, 50, 75)
                                                  if pct in mid_s}  # fmt: skip
-    with ThreadPoolExecutor(max_workers=len(times)) as pool:
-        futures = {k: pool.submit(grab_frame, input_path, t, size, ffmpeg_bin)
-                   for k, t in times.items()}  # fmt: skip
-        grabbed = {k: f.result() for k, f in futures.items()}
+    if state_a_img is not None:
+        del times["a"]
+    grabbed = _grab_all(input_path, times, size, ffmpeg_bin)
+    if state_a_img is not None:
+        grabbed["a"] = state_a_img
     img_a, img_b = grabbed["a"], grabbed["b"]
     save("state_a.png", img_a, "state_a", state_a_s)
     save("state_b.png", img_b, "state_b", state_b_s)

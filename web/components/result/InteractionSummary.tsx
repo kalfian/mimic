@@ -1,11 +1,15 @@
 import type { ReactNode } from "react";
 
+import { ColorSwatch } from "@/components/result/AppearanceFacts";
 import { ConfidenceBadge } from "@/components/ui/ConfidenceBadge";
 import { LabelSourceTag } from "@/components/ui/LabelSourceTag";
 import { Panel } from "@/components/ui/Panel";
 import {
+  BAND_LABELS,
   DIRECTION_LABELS,
+  formatColor,
   formatMs,
+  formatPx,
   formatPixelRatio,
   INTERACTION_TYPE_LABELS,
   PATTERN_LABELS,
@@ -93,6 +97,28 @@ export function InteractionSummary({ spec }: { spec: MotionSpec }) {
         </Row>
 
         <Row label="Direction">{DIRECTION_LABELS[ix.direction]}</Row>
+
+        {spec.scene ? (
+          <Row label="Page">
+            <span className="nums inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>
+                {formatPx(spec.scene.viewport_css.w)} × {formatPx(spec.scene.viewport_css.h)}
+              </span>
+              {spec.scene.page_background ? (
+                <span
+                  className={`inline-flex items-center gap-1.5 ${spec.scene.page_background.confidence.band === "low" ? "text-ink-3" : "text-ink-2"}`}
+                  title={`Page background, ${BAND_LABELS[spec.scene.page_background.confidence.band].toLowerCase()} confidence`}
+                >
+                  <ColorSwatch hex={formatColor(spec.scene.page_background.value)} />
+                  {formatColor(spec.scene.page_background.value)}
+                  {spec.scene.page_background.confidence.band === "low" ? "?" : ""}
+                  <span className="sr-only">page background</span>
+                </span>
+              ) : null}
+            </span>
+            <span className="mt-1 block text-xs text-ink-3">Measured from the recording; element values are in the timeline details.</span>
+          </Row>
+        ) : null}
 
         <Row label="Display scale">
           <span className="nums">{formatPixelRatio(source.pixel_ratio)}</span>{" "}

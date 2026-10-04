@@ -7,8 +7,15 @@ import { ApiError } from "../errors";
 import { pollJob, type JobPollState } from "../jobPoller";
 import { buildTimeline } from "../timeline";
 import type { Stage } from "../types";
+import { specMode, isContinuousSpec, jsOutput } from "../spec";
+import { velocityModelOf } from "../velocity";
+import { CONTINUOUS_FIXTURE_JOB_ID } from "./mockJobsRegistry";
 import {
+  buildMockResult,
+  CONTINUOUS_VARIANTS,
   configureMock,
+  MOCK_CONTINUOUS_SAMPLE_JOB_ID,
+  MOCK_RESULT_SCENARIOS,
   MOCK_SAMPLE_JOB_ID,
   mockCheckInterpreter,
   mockGetJob,
@@ -110,7 +117,7 @@ describe("mock lifecycle", () => {
     );
   });
 
-  for (const code of ["no_motion_detected", "unsupported_motion", "no_stable_state", "internal_error", "interrupted"] as const) {
+  for (const code of ["no_motion_detected", "unsupported_motion", "no_stable_state", "continuous_motion_unsupported", "internal_error", "interrupted"] as const) {
     it(`pipeline failure: ${code}`, async () => {
       const { final } = await runScenario(code);
       assert.equal(final.phase, "failed");
@@ -245,5 +252,65 @@ describe("mock lifecycle", () => {
     const { created } = await runScenario("no_motion_detected");
     await assert.rejects(mockRerunInterpretation(created.id), (e: unknown) => e instanceof ApiError && e.code === "not_ready");
     await assert.rejects(mockRerunInterpretation("nope"), (e: unknown) => e instanceof ApiError && e.code === "not_found");
+  });
+});
+
+describe("mock continuous mode (PLAN-continuous §7.2)", () => {
+  it("?scenario=continuous runs the full lifecycle and ends with the continuous fixture", async () => {
+    assert.equal(readMockScenarioFromLocation("?scenario=continuous"), "continuous");
+    const { created, final } = await runScenario("continuous", true);
+    assert.equal(final.phase, "succeeded");
+    const result = final.result!;
+    assert.equal(result.job_id, created.id);
+    assert.equal(specMode(result.spec), "continuous");
+    assert.ok(isContinuousSpec(result.spec));
+    assert.equal(typeof jsOutput(result.outputs), "string", "JS tab present");
+    assert.equal(result.spec.source.filename, "hover.mov");
+    assert.ok(result.artifacts.keyframes.length > 0 && result.artifacts.keyframes.every((k) => k.kind === "phase" && k.url.startsWith("data:image/svg+xml")));
+    assert.equal(buildTimeline(result.spec).isEmpty, true, "no transition rows in continuous mode");
+  });
+
+  it("every continuous variant is a result scenario and builds a velocity model", () => {
+    for (const v of CONTINUOUS_VARIANTS) {
+      assert.ok((MOCK_RESULT_SCENARIOS as readonly string[]).includes(v), v);
+      assert.equal(readMockScenarioFromLocation(`?scenario=${v}`), v);
+      for (const useInterpreter of [true, false]) {
+        const r = buildMockResult({ id: `mock-${v}-0-auto-1`, scenario: v, useInterpreter, pixelRatio: "auto", filename: "c.mov", videoUrl: null });
+        assert.equal(specMode(r.spec), "continuous", v);
+        assert.ok(velocityModelOf(r.spec), v);
+        assert.ok(jsOutput(r.outputs) !== null, v);
+      }
+    }
+    const t = buildMockResult({ id: "mock-success-0-auto-1", scenario: "success", useInterpreter: true, pixelRatio: "auto", filename: "a.mov", videoUrl: null });
+    assert.equal(specMode(t.spec), "transition");
+    assert.equal(jsOutput(t.outputs), null, "no JS tab in transition mode");
+  });
+
+  it("variants reach each chart state", () => {
+    const model = (v: (typeof CONTINUOUS_VARIANTS)[number]) =>
+      velocityModelOf(buildMockResult({ id: "x", scenario: v, useInterpreter: false, pixelRatio: "auto", filename: "c.mov", videoUrl: null }).spec)!;
+    assert.ok(model("continuous_degraded").degradedCount > 0);
+    assert.ok(model("continuous_uncertain").uncertainCount >= 2);
+    assert.equal(model("continuous_autoplay").bands.length, 1);
+    assert.equal(model("continuous_vertical").axis, "y");
+    assert.equal(model("continuous_no_samples").hasSamples, false);
+  });
+
+  it("continuous fixture id is seeded (owned by `user`) and already succeeded", async () => {
+    assert.equal(CONTINUOUS_FIXTURE_JOB_ID, MOCK_CONTINUOUS_SAMPLE_JOB_ID, "registry seed must match the fixture");
+    const done = await pollJob(MOCK_CONTINUOUS_SAMPLE_JOB_ID, { ...fast, client });
+    assert.equal(done.phase, "succeeded");
+    assert.equal(done.job?.owner?.username, "user");
+    assert.equal(specMode(done.result!.spec), "continuous");
+    assert.equal(done.result!.spec.interpretation.status, "disabled", "fixture was made with AI labeling off");
+  });
+
+  it("re-run works on a continuous job", async () => {
+    const { created } = await runScenario("continuous_vertical");
+    const status = await mockRerunInterpretation(created.id, true);
+    assert.equal(status.status, "queued");
+    const final = await pollJob(created.id, { ...fast, client });
+    assert.equal(final.phase, "succeeded");
+    assert.equal(final.result!.spec.continuous?.axis, "y");
   });
 });

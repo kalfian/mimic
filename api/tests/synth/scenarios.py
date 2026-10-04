@@ -1,4 +1,5 @@
-"""Scenario definitions S1–S12 + ground-truth derivation (PLAN §11.3).
+"""Scenario definitions S1–S12, C1–C14, N1 + ground-truth derivation (PLAN §11.3,
+PLAN-continuous §8.2).
 
 Each builder returns a :class:`ScenarioDef`: the scene (nodes, tweens, cursor path) **and** the
 semantic metadata the renderer can't know (roles, expected element kinds, interaction type,
@@ -8,14 +9,22 @@ the renderer, so the two cannot drift apart.
 Canvas: 1280×800 CSS px (2560×1600 device px for the Retina variant). A static "page chrome"
 (header, sidebar, footer text) keeps frames from being empty; scenario content sits right of
 the sidebar.
+
+The continuous scenarios (C*, N1) add scroller strips whose track ``translate`` is driven by a
+velocity-integrated :class:`kinematics.VelocityProfile` (``Scene.drivers``); their truth is
+derived from the same profile. Every truth also carries the rendered appearance (§13).
 """
 
 from __future__ import annotations
 
+import functools
+import statistics
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 
-from app.models.ir import Box, ColorValue, PxValue, RatioValue, Shadow, ShadowValue
+import numpy as np
+
+from app.models.ir import Box, ColorValue, PxValue, RatioValue, Shadow, ShadowValue, Size
 
 from .animate import (
     CSS_KEYWORDS,
@@ -28,18 +37,39 @@ from .animate import (
     solve_start_for_crossing,
 )
 from .encode import EncodeSpec
-from .scene import Node, Scene, hex_to_rgb, rgb_to_hex, text_size
+from .kinematics import (
+    Autoplay,
+    Drag,
+    DragCursor,
+    EdgeZoom,
+    HeldDrag,
+    Hold,
+    Inertia,
+    Ramp,
+    SnapTween,
+    VelocityProfile,
+    card_zoom_driver,
+    strip_driver,
+)
+from .scene import Driver, Node, Scene, build_sprite, hex_to_rgb, rgb_to_hex, text_size
 from .truth import (
     Truth,
+    TruthAppearance,
+    TruthCard,
+    TruthContinuous,
     TruthCursor,
     TruthCursorEvent,
     TruthEasing,
     TruthElement,
     TruthInteraction,
+    TruthLoop,
+    TruthPhase,
     TruthRelationship,
+    TruthScene,
     TruthSegment,
     TruthTransition,
     TruthVideo,
+    TruthZoom,
 )
 
 CSS_W, CSS_H = 1280, 800
@@ -90,6 +120,12 @@ class ScenarioDef:
     segment_triggers: dict[str, float] = field(default_factory=dict)
     relationships: list[RelSpec] = field(default_factory=list)
     expected_error: str | None = None
+    # PLAN-continuous additions
+    suite: str = "transition"
+    mode: str = "transition"
+    expected_warnings: list[str] = field(default_factory=list)
+    continuous: ContinuousDef | None = None
+    ambient: list[ContinuousDef] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -208,16 +244,24 @@ def button(
     return b
 
 
-def scene_of(nodes: list[Node], cursor: CursorPath | None, duration_s: float, static=None) -> Scene:
+def scene_of(
+    nodes: list[Node],
+    cursor: CursorPath | None,
+    duration_s: float,
+    static=None,
+    drivers: dict[str, Driver] | None = None,
+    background: str = PAGE_BG,
+) -> Scene:
     return Scene(
         width=CSS_W,
         height=CSS_H,
-        background=c(PAGE_BG),
+        background=c(background),
         static_nodes=page_chrome() if static is None else static,
         nodes=nodes,
         timeline=Timeline(),
         cursor=cursor,
         duration_s=duration_s,
+        drivers=dict(drivers or {}),
     )
 
 
@@ -806,6 +850,682 @@ def negative_scroll() -> ScenarioDef:
 
 
 # --------------------------------------------------------------------------------------------
+# PLAN-continuous §8.2 — scroller strips (C1–C12) and the ambient negative (N1)
+# --------------------------------------------------------------------------------------------
+
+STRIP_BG = "#E5E7EB"
+CARD_BG = "#FFFFFF"
+CARD_TITLE = "#111827"
+CARD_SUB = "#6B7280"
+IDLE_CURSOR = (1120.0, 660.0)
+
+
+@dataclass(frozen=True)
+class Strip:
+    """A scroller: viewport box (``overflow: hidden``) holding a track with **two identical
+    copies** of ``cards`` distinct cards (seamless loop). ``lead`` = offset of the first card
+    along the axis inside the viewport, ``cross`` = offset across it. Geometry in CSS px."""
+
+    prefix: str
+    axis: str  # "x" | "y"
+    x: float
+    y: float
+    w: float
+    h: float
+    cards: int = 8
+    card_w: float = 200.0
+    card_h: float = 160.0
+    gap: float = 16.0
+    lead: float = 8.0
+    cross: float = 20.0
+    radius: float = 12.0
+    card_radius: float = 10.0
+    layout: str = "card"  # "card" (image + title + subtitle) | "chip" (thumb + title)
+    title_px: float = 13.0
+    seed: int = 300
+    # theme (P2b; defaults = the light §8.2 strip, rendered unchanged)
+    track_bg: str = STRIP_BG
+    card_bg: str = CARD_BG
+    title_color: str = CARD_TITLE
+    sub_color: str = CARD_SUB
+    #: 1 px card border colour (drawn as the card box with the fill inset by 1 px); None = none
+    border: str | None = None
+    #: every ``dark_every``-th card (k % n == 1) shows a dark photo (texture × ``dark_tone``)
+    dark_every: int = 0
+    dark_tone: float = 0.3
+    #: magnification at the viewport edges (:class:`kinematics.EdgeZoom`); 1.0 = rigid strip
+    zoom_edge: float = 1.0
+    #: page background behind a strip shown without the light page chrome; None = §8.2 page
+    page_bg: str | None = None
+    #: flat placeholder images (one plain fill per card from ``FLAT_FILLS``) instead of the
+    #: procedural photo texture: low-texture content (acceptance run, PLAN-continuous P2e)
+    flat: bool = False
+
+    @property
+    def viewport_id(self) -> str:
+        return f"{self.prefix}scroller"
+
+    @property
+    def track_id(self) -> str:
+        return f"{self.prefix}track"
+
+    @property
+    def pitch(self) -> float:
+        return (self.card_w if self.axis == "x" else self.card_h) + self.gap
+
+    @property
+    def period(self) -> float:
+        return self.cards * self.pitch
+
+    @property
+    def view_len(self) -> float:
+        return self.w if self.axis == "x" else self.h
+
+    @property
+    def box(self) -> tuple[float, float, float, float]:
+        return (self.x, self.y, self.w, self.h)
+
+    def _card(self, copy: int, k: int) -> Node:
+        along = self.lead + copy * self.period + k * self.pitch
+        cx, cy = (along, self.cross) if self.axis == "x" else (self.cross, along)
+        cid = f"{self.prefix}c{copy}_{k}"
+        if self.border is None:
+            card = Node(id=cid, x=cx, y=cy, w=self.card_w, h=self.card_h, fill=c(self.card_bg),
+                        radius=self.card_radius)  # fmt: skip
+        else:
+            card = Node(id=cid, x=cx, y=cy, w=self.card_w, h=self.card_h, fill=c(self.border),
+                        radius=self.card_radius)  # fmt: skip
+            card.children.append(
+                Node(
+                    id=f"{cid}_fill",
+                    x=1,
+                    y=1,
+                    w=self.card_w - 2,
+                    h=self.card_h - 2,
+                    fill=c(self.card_bg),
+                    radius=max(self.card_radius - 1, 0),
+                )  # fmt: skip
+            )
+        tone = self.dark_tone if self.dark_every and k % self.dark_every == 1 else 1.0
+        title = f"Item {k + 1}"
+        if self.layout == "card":
+            img_h = round(self.card_h * 0.6)
+            img = (
+                Node(id=f"{cid}_img", x=8, y=8, w=self.card_w - 16, h=img_h, radius=6,
+                     fill=c(FLAT_FILLS[k % len(FLAT_FILLS)]))
+                if self.flat
+                else Node(id=f"{cid}_img", shape="image", x=8, y=8, w=self.card_w - 16,
+                          h=img_h, radius=6, seed=self.seed + k, tone=tone)
+            )  # fmt: skip
+            card.children += [
+                img,
+                text(f"{cid}_t", title, 12, 8 + img_h + 12, self.title_px, self.title_color, 1.3),
+                text(f"{cid}_s", "Placeholder", 12, 8 + img_h + 34, 10, self.sub_color),
+            ]
+        else:
+            thumb = self.card_h - 16
+            card.children += [
+                Node(
+                    id=f"{cid}_img",
+                    shape="image",
+                    x=8,
+                    y=8,
+                    w=thumb,
+                    h=thumb,
+                    radius=6,
+                    seed=self.seed + k,
+                    tone=tone,
+                ),  # fmt: skip
+                text(
+                    f"{cid}_t",
+                    title,
+                    thumb + 16,
+                    round((self.card_h - self.title_px) / 2),
+                    self.title_px,
+                    self.title_color,
+                    1.3,
+                ),  # fmt: skip
+            ]
+        return card
+
+    def node(self) -> Node:
+        track_len = 2 * self.period + self.lead
+        tw, th = (track_len, self.h) if self.axis == "x" else (self.w, track_len)
+        track = Node(id=self.track_id, shape="group", x=0, y=0, w=tw, h=th)
+        track.children = [self._card(cp, k) for cp in (0, 1) for k in range(self.cards)]
+        return Node(id=self.viewport_id, x=self.x, y=self.y, w=self.w, h=self.h,
+                    fill=c(self.track_bg), radius=self.radius, clip_children=True,
+                    children=[track])  # fmt: skip
+
+    def driver(self, profile: VelocityProfile) -> Driver:
+        if self.view_len > self.period:
+            raise ValueError("strip copy must be at least as long as the viewport")
+        return strip_driver(profile, self.axis, self.period)  # type: ignore[arg-type]
+
+    @property
+    def zoom(self) -> EdgeZoom | None:
+        return EdgeZoom(self.zoom_edge, self.view_len / 2.0) if self.zoom_edge != 1.0 else None
+
+    def drivers(self, profile: VelocityProfile) -> dict[str, Driver]:
+        """The track driver, plus one ``(tx, ty, scale)`` driver per card when zoomed."""
+        track = self.driver(profile)
+        out: dict[str, Driver] = {self.track_id: track}
+        zoom = self.zoom
+        if zoom is None:
+            return out
+        card_len = self.card_w if self.axis == "x" else self.card_h
+        for cp in (0, 1):
+            for k in range(self.cards):
+                along = self.lead + cp * self.period + k * self.pitch
+                centre = along + card_len / 2.0 - self.view_len / 2.0
+                out[f"{self.prefix}c{cp}_{k}"] = card_zoom_driver(
+                    track,
+                    zoom,
+                    self.axis,
+                    centre,  # type: ignore[arg-type]
+                )
+        return out
+
+    def centre_geometry(self) -> tuple[float, float]:
+        """``(gap, pitch)`` as drawn at the viewport centre: two cards placed symmetrically
+        about it (scale ≈ 1). Equals ``(gap, pitch)`` for a rigid strip."""
+        zoom = self.zoom
+        if zoom is None:
+            return self.gap, self.pitch
+        card_len = self.card_w if self.axis == "x" else self.card_h
+        u = self.pitch / 2.0
+        gap = 2.0 * (zoom.screen(u) - zoom.scale(u) * card_len / 2.0)
+        return gap, card_len + gap
+
+
+#: Plain placeholder image fills of ``Strip(flat=True)`` (distinct per card, low contrast).
+FLAT_FILLS = ("#2E3440", "#3B4252", "#434C5E", "#4C566A", "#3A3F4B", "#2B303B", "#454B57",
+              "#363C48")  # fmt: skip
+
+
+@dataclass
+class ContinuousDef:
+    """A scroller and its velocity profile, plus behaviour facts the profile can't express."""
+
+    strip: Strip
+    profile: VelocityProfile
+    pause_on: str | None = None
+    pause_on_accept: tuple[str, ...] = ()
+    resume_delay_after_leave_ms: int | None = None
+
+
+def idle_cursor(x: float = IDLE_CURSOR[0], y: float = IDLE_CURSOR[1]) -> CursorPath:
+    """A visible cursor resting outside the scroller for the whole recording."""
+    return CursorPath(keys=[CursorKey(0.0, x, y)])
+
+
+def first_ms_inside(
+    cur: CursorPath, box: tuple[float, float, float, float], *, entering: bool, t_from: float,
+    t_to: float,
+) -> float:  # fmt: skip
+    """First whole ms in ``[t_from, t_to]`` where the hotspot is inside (``entering``) /
+    outside a static box (edges count as inside, like ``time_inside``)."""
+    bx, by, bw, bh = box
+
+    def inside(t: float) -> bool:
+        x, y = cur.position(t)
+        return bx <= x <= bx + bw and by <= y <= by + bh
+
+    hit = first_time(lambda t: inside(t) == entering, t_from=t_from, t_to=t_to)
+    if hit is None:
+        raise RuntimeError(f"cursor never {'enters' if entering else 'leaves'} {box}")
+    return ms(hit)
+
+
+def drag_cursor(
+    profile: VelocityProfile,
+    axis: str,
+    start: tuple[float, float],
+    grabs: list[tuple[tuple[float, float], tuple[float, float]]],
+) -> DragCursor:
+    """Cursor for a drag scenario: for each drag phase ``(press point, park point)``: arrive at
+    the press point 300 ms before the press (600 ms leg), follow the content 1:1 until release
+    (mousedown/mouseup at press/release), rest 300 ms, then move to the park point (600 ms)."""
+    windows = profile.drag_windows()
+    if len(windows) != len(grabs):
+        raise ValueError("one (press, park) pair per drag phase")
+    keys = [CursorKey(0.0, *start)]
+    clicks: list[tuple[float, float]] = []
+    pos = start
+    for (press, release), (p, park) in zip(windows, grabs, strict=True):
+        d = profile.position(release) - profile.position(press)
+        rel = (p[0] + d, p[1]) if axis == "x" else (p[0], p[1] + d)
+        if keys[-1].t_s > press - 0.9 + 1e-9:
+            raise ValueError("drags too close together for the cursor path")
+        keys += [
+            CursorKey(round(press - 0.9, 3), *pos),
+            CursorKey(round(press - 0.3, 3), *p, "ease-in-out"),
+            CursorKey(press, *p),
+            CursorKey(release, *rel, "linear"),  # overridden by DragCursor inside the window
+            CursorKey(round(release + 0.3, 3), *rel),
+            CursorKey(round(release + 0.9, 3), *park, "ease-in-out"),
+        ]
+        clicks.append((press, release))
+        pos = park
+    return DragCursor(keys=keys, clicks=clicks, profile=profile, axis=axis)  # type: ignore[arg-type]
+
+
+def _strip_scene(strip: Strip, profile: VelocityProfile, cursor: CursorPath | None) -> Scene:
+    if strip.page_bg is None:
+        return scene_of(
+            [strip.node()],
+            cursor,
+            duration_s=profile.end_ms / 1000.0,
+            drivers=strip.drivers(profile),
+        )
+    return scene_of(
+        [strip.node()],
+        cursor,
+        duration_s=profile.end_ms / 1000.0,
+        static=[],
+        drivers=strip.drivers(profile),
+        background=strip.page_bg,
+    )
+
+
+def _scroller_meta() -> list[ElementMeta]:
+    return [ElementMeta("scroller", "Scroller", "scroller", "scroller")]
+
+
+def _continuous_interaction(kind: str) -> dict:
+    drag = kind == "drag"
+    return dict(
+        type="drag" if drag else "continuous",
+        accept_types=["drag"] if drag else ["continuous"],
+        trigger="drag" if drag else "autoplay",
+        reverse_trigger="none",
+        direction="continuous",
+        pattern="carousel" if drag else "marquee",
+        target_element_id="scroller",
+    )
+
+
+def _continuous_def(
+    scenario: str, description: str, checks: list[str], strip: Strip, profile: VelocityProfile,
+    cursor: CursorPath | None, *, kind: str, **cdef_kw,
+) -> ScenarioDef:  # fmt: skip
+    scene = _strip_scene(strip, profile, cursor)
+    return ScenarioDef(
+        scenario=scenario,
+        description=description,
+        checks=checks,
+        scene=scene,
+        elements=_scroller_meta(),
+        interaction=_continuous_interaction(kind),
+        suite="continuous",
+        mode="continuous",
+        continuous=ContinuousDef(strip=strip, profile=profile, **cdef_kw),
+    )
+
+
+def _main_strip(**kw) -> Strip:
+    """§8.2 strip: viewport 760×200 at (260, 300); cards 200×160, gap 16 → pitch 216."""
+    return Strip("", "x", 260, 300, 760, 200, **kw)
+
+
+# ---- C1 / C2 — autoplay-only marquees ------------------------------------------------------
+
+
+def marquee_autoplay() -> ScenarioDef:
+    strip = _main_strip()
+    profile = VelocityProfile([Autoplay(-60.0, 8.0)])
+    return _continuous_def(
+        "C1",
+        "Marquee: 8 cards (pitch 216, period 1728) move left at 60 px/s for 8 s; idle cursor "
+        "outside. Travel 480 px < one period → loop length not observable.",
+        ["speed", "direction", "mode continuous", "loop not observed"],
+        strip, profile, idle_cursor(), kind="autoplay",
+    )  # fmt: skip
+
+
+def marquee_fast_loop() -> ScenarioDef:
+    strip = _main_strip(cards=4)
+    profile = VelocityProfile([Autoplay(-240.0, 8.0)])
+    return _continuous_def(
+        "C2",
+        "Marquee: 4-card loop (period 864) moving left at 240 px/s for 8 s (1920 px travel).",
+        ["loop period observed", "loop duration"],
+        strip, profile, idle_cursor(), kind="autoplay",
+    )  # fmt: skip
+
+
+# ---- C3 / C10 — hover pause ----------------------------------------------------------------
+
+
+def marquee_hover_pause(*, vertical: bool = False) -> ScenarioDef:
+    if vertical:
+        strip = Strip("", "y", 520, 140, 240, 520)  # cards 200×160 stacked, pitch 176
+        v = -30.0
+        cur = hover_cursor(edge_x=520, y=400, end_x=640, t_enter=2.0)
+        cur.keys += [CursorKey(3.7, 640, 400), CursorKey(4.3, 880, 400, "ease-in-out")]
+    else:
+        strip = _main_strip()
+        v = 40.0
+        cur = hover_cursor(edge_x=260, y=400, end_x=360, t_enter=2.0)
+        cur.keys += [CursorKey(3.7, 360, 400), CursorKey(4.3, 360, 600, "ease-in-out")]
+    t_enter = first_ms_inside(cur, strip.box, entering=True, t_from=0.0, t_to=3.0)
+    t_leave = first_ms_inside(cur, strip.box, entering=False, t_from=3.7, t_to=4.3)
+    decel, delay, ramp, total = 0.4, 0.3, 0.6, 8.0
+    profile = VelocityProfile([
+        Autoplay(v, t_enter),
+        Ramp(0.0, decel, "ease-out", "decelerate"),
+        Hold(round(t_leave + delay - (t_enter + decel), 3)),
+        Ramp(v, ramp, "ease-in", "resume"),
+        Autoplay(v, round(total - (t_leave + delay + ramp), 3)),
+    ])  # fmt: skip
+    if vertical:
+        return _continuous_def(
+            "C10",
+            "Vertical ticker: 8 cards (pitch 176) move up at 30 px/s; pointer enters at 2.0 s → "
+            "decelerate 400 ms ease-out to 0; leaves at 4.0 s → after 300 ms resume over 600 ms "
+            "ease-in.",
+            ["axis y", "pause on hover", "decel/ramp", "resume delay"],
+            strip, profile, cur, kind="autoplay", pause_on="hover", pause_on_accept=("hover",),
+            resume_delay_after_leave_ms=300,
+        )  # fmt: skip
+    return _continuous_def(
+        "C3",
+        "Marquee 40 px/s right; pointer enters at 2.0 s → decelerate 400 ms ease-out to 0; leaves "
+        "at 4.0 s → after 300 ms resume over 600 ms ease-in.",
+        ["pause on hover", "decel/ramp", "resume delay"],
+        strip, profile, cur, kind="autoplay", pause_on="hover", pause_on_accept=("hover",),
+        resume_delay_after_leave_ms=300,
+    )  # fmt: skip
+
+
+# ---- C4–C9 — drag carousels ----------------------------------------------------------------
+
+#: Cursor rest / park points for the drag carousels (outside the 260..1020 × 300..500 viewport).
+DRAG_START = (560.0, 690.0)
+
+
+def carousel_drag_inertia(*, cursor_visible: bool = True) -> ScenarioDef:
+    strip = _main_strip()
+    v = 40.0
+    profile = VelocityProfile([
+        Autoplay(v, 2.0),
+        Drag(-400.0, 0.45, -1100.0),  # press at 2.0 s stops autoplay; release v0 = -1100
+        Inertia(0.200),
+        Hold(1.0),
+        Ramp(v, 0.75, "ease-in-out", "resume"),
+        Autoplay(v, 1.0),
+        Drag(300.0, 0.40, 1000.0),
+        Inertia(0.200),
+        Hold(1.0),
+        Ramp(v, 0.75, "ease-in-out", "resume"),
+        Autoplay(v, 1.289),
+    ])  # fmt: skip
+    cur = drag_cursor(
+        profile,
+        "x",
+        DRAG_START,
+        [((700.0, 400.0), (420.0, 650.0)), ((500.0, 400.0), (900.0, 650.0))],
+    )
+    cur.visible = cursor_visible
+    desc = (
+        "Carousel: autoplay 40 px/s right; press at 2.0 s stops it; drag left 400 px in 450 ms "
+        "(release -1100 px/s) → inertia τ 200 ms → rest; resume after 1000 ms (750 ms ease-in-out "
+        "ramp); second drag right 300 px / 400 ms (release +1000 px/s), τ 200 ms, same resume."
+    )
+    if cursor_visible:
+        return _continuous_def(
+            "C4", desc, ["phase sequence", "tau", "v0", "resume", "pointer ratio"],
+            strip, profile, cur, kind="drag", pause_on="press", pause_on_accept=("press",),
+        )  # fmt: skip
+    return _continuous_def(
+        "C5", desc + " No cursor rendered (the real-recording analogue).",
+        ["same values as C4", "pause trigger unknown"],
+        strip, profile, cur, kind="drag", pause_on="press", pause_on_accept=("unknown",),
+    )  # fmt: skip
+
+
+def carousel_drag_snap() -> ScenarioDef:
+    strip = _main_strip()
+    v = 40.0
+    snap = SnapTween(0.300, "ease-out", step=strip.pitch, min_px=strip.pitch / 4)
+    profile = VelocityProfile([
+        Autoplay(v, 2.0),
+        Drag(-380.0, 0.45, -1000.0),
+        snap,
+        Hold(1.0),
+        Ramp(v, 0.75, "ease-in-out", "resume"),
+        Autoplay(v, 1.5),
+        Drag(350.0, 0.40, 1100.0),
+        snap,
+        Hold(1.0),
+        Ramp(v, 0.75, "ease-in-out", "resume"),
+        Autoplay(v, 1.55),
+    ])  # fmt: skip
+    cur = drag_cursor(
+        profile,
+        "x",
+        DRAG_START,
+        [((700.0, 400.0), (420.0, 650.0)), ((450.0, 400.0), (900.0, 650.0))],
+    )
+    return _continuous_def(
+        "C8",
+        "Carousel with snap: autoplay 40 px/s right; 2 drags (left 380 px, right 350 px); on "
+        "release the track tweens to the next card in the drag direction (grid 216 px) over "
+        "300 ms ease-out; rest 1000 ms; resume 750 ms ease-in-out.",
+        ["snap grid", "snap step", "snap duration"],
+        strip, profile, cur, kind="drag", pause_on="press", pause_on_accept=("press",),
+    )  # fmt: skip
+
+
+def carousel_fling_fast() -> ScenarioDef:
+    strip = _main_strip()
+    v = 40.0
+    profile = VelocityProfile([
+        Autoplay(v, 2.0),
+        Drag(-700.0, 0.40, -2500.0),
+        Inertia(0.250),
+        Hold(1.0),
+        Ramp(v, 0.75, "ease-in-out", "resume"),
+        Autoplay(v, 1.0),
+        Drag(600.0, 0.40, 2200.0),
+        Inertia(0.250),
+        Hold(1.0),
+        Ramp(v, 0.75, "ease-in-out", "resume"),
+        Autoplay(v, 0.772),
+    ])  # fmt: skip
+    cur = drag_cursor(
+        profile,
+        "x",
+        DRAG_START,
+        [((980.0, 400.0), (420.0, 650.0)), ((320.0, 400.0), (900.0, 650.0))],
+    )
+    return _continuous_def(
+        "C9",
+        "Fast flings: autoplay 40 px/s right; drag left 700 px / 400 ms (release -2500 px/s), "
+        "τ 250 ms; drag right 600 px / 400 ms (release +2200 px/s), τ 250 ms; rendered at 30 fps "
+        "and encoded at CRF 28 (≈83 px per frame at peak).",
+        ["large-shift tracking", "tracking_degraded allowed", "relaxed targets"],
+        strip, profile, cur, kind="drag", pause_on="press", pause_on_accept=("press",),
+    )  # fmt: skip
+
+
+# ---- C11 — transition with an ambient marquee ----------------------------------------------
+
+
+#: P2b dark theme (the motivating recording): page = track ≈ #020202, low-contrast cards.
+DARK_PAGE = "#020202"
+DARK_CARD = "#141418"
+DARK_BORDER = "#26262C"
+DARK_TITLE = "#E5E7EB"
+DARK_SUB = "#9CA3AF"
+#: Card scale at the viewport edges measured on the motivating recording (164 → ≈192 px).
+REAL_ZOOM_EDGE = 1.165
+
+
+def _inertia_to_autoplay_s(tau: float, v0: float, v_auto: float) -> float:
+    """Inertia → autoplay duration: until the decay is within the pipeline's autoplay band
+    (``max(3, 0.12 |v_auto|)`` px/s, PLAN-continuous §4.5 step 2) of ``v_auto``."""
+    tol = max(3.0, 0.12 * abs(v_auto))
+    return round(tau * float(np.log(abs(v0 - v_auto) / tol)), 3)
+
+
+def carousel_dark_edge_zoom(*, zoom_edge: float = REAL_ZOOM_EDGE) -> ScenarioDef:
+    """P2b regression for the motivating recording's card layout (C13).
+
+    Dark page (= track) #020202, 8 equal low-contrast cards #141418 (1 px #26262C border, inset
+    photo, every third one dark) 164×150 with 4 px gaps, scaled by their distance from the
+    viewport centre (×1 at the centre, ×``zoom_edge`` at the edges, gaps scale along), no
+    cursor, captured on a 75 Hz grid (MOV, like C12). Motion: autoplay +35 px/s; press stops it;
+    fling left → momentum blends back into autoplay; fling right → rest 200 ms → resume.
+    """
+    strip = Strip(
+        "", "x", 260, 300, 760, 200, card_w=164.0, card_h=150.0, gap=4.0, cross=25.0,
+        card_radius=10.0, track_bg=DARK_PAGE, card_bg=DARK_CARD, title_color=DARK_TITLE,
+        sub_color=DARK_SUB, border=DARK_BORDER, dark_every=3, zoom_edge=zoom_edge,
+        page_bg=DARK_PAGE, seed=500,
+    )  # fmt: skip
+    v = 35.0
+    tau1 = 0.26
+    profile = VelocityProfile([
+        Autoplay(v, 2.0),
+        Drag(-450.0, 0.40, -1400.0),  # press at 2.0 s stops autoplay; release v0 = -1400
+        Inertia(tau1, v_inf=v, dur=_inertia_to_autoplay_s(tau1, -1400.0, v)),
+        Autoplay(v, 1.2),
+        Drag(320.0, 0.40, 1100.0),
+        Inertia(0.25),  # decays to rest (10 px/s cut-off)
+        Hold(0.2),
+        Ramp(v, 0.815, "material-decelerate", "resume"),
+        Autoplay(v, 1.493),  # ends at 9.200 s = 552 frames at 60 fps
+    ])  # fmt: skip
+    cur = drag_cursor(
+        profile,
+        "x",
+        DRAG_START,
+        [((760.0, 400.0), (420.0, 650.0)), ((450.0, 400.0), (900.0, 650.0))],
+    )
+    cur.visible = False
+    zoom_txt = (
+        f"cards scale with their distance from the viewport centre (×1 → ×{zoom_edge:g} at the "
+        "edges); "
+        if zoom_edge != 1.0
+        else ""
+    )
+    return _continuous_def(
+        "C13",
+        "Dark carousel (page = track #020202, low-contrast #141418 cards with a 1 px border and "
+        "inset photos, every third one dark; 164×150, gap 4 → pitch 168 at the centre); "
+        + zoom_txt
+        + "autoplay 35 px/s right; press at 2.0 s stops it; fling left 450 px (release "
+        "-1400 px/s) → momentum τ 260 ms blends into autoplay; fling right 320 px (release "
+        "+1100 px/s) → τ 250 ms to rest → 200 ms → resume 815 ms material-decelerate. No "
+        "cursor; 75 Hz capture grid, MOV.",
+        ["card size / pitch / gap reported", "phase sequence", "tau", "v0", "resume"],
+        strip, profile, cur, kind="drag", pause_on="press", pause_on_accept=("unknown",),
+    )  # fmt: skip
+
+
+def carousel_flat_held_stop() -> ScenarioDef:
+    """Acceptance-run regression (C14): the motivating recording's flow on low-texture
+    placeholder cards, as an independent replica of it renders them.
+
+    Dark page, flat placeholder cards (one plain fill per card + a title, no photo texture),
+    so the pass-1 activity grid only sees the card edges / titles and splits the row into
+    pieces (``regime.merge_row_pieces``). Rigid cards: with flat cards that also scale, the
+    tracker under-reads the mean on-screen speed by ≈4 % (it follows the few, mostly central
+    features), beyond §8.4's 2 % — a documented limitation, not part of this regression.
+    Motion: autoplay +35 px/s; fling left → momentum blends into autoplay; fling right →
+    blends into autoplay; a drag that slows to a stop **while pressed** (no glide, no momentum)
+    → held 200 ms → resume 815 ms material-decelerate. No cursor, 60 fps.
+    """
+    strip = Strip(
+        "", "x", 260, 300, 760, 200, card_w=164.0, card_h=150.0, gap=4.0, cross=25.0,
+        card_radius=10.0, track_bg=DARK_PAGE, card_bg=DARK_CARD, title_color=DARK_TITLE,
+        sub_color=DARK_SUB, page_bg=DARK_PAGE, flat=True, seed=700,
+    )  # fmt: skip
+    v = 35.0
+    tau = 0.26
+    profile = VelocityProfile([
+        Autoplay(v, 2.0),
+        Drag(-450.0, 0.40, -1400.0),
+        Inertia(tau, v_inf=v, dur=_inertia_to_autoplay_s(tau, -1400.0, v)),
+        Autoplay(v, 1.0),
+        Drag(320.0, 0.40, 1100.0),
+        Inertia(tau, v_inf=v, dur=_inertia_to_autoplay_s(tau, 1100.0, v)),
+        Autoplay(v, 1.0),
+        HeldDrag(-600.0, 0.70),  # the pointer slows to a stop before letting go
+        Hold(0.2),
+        Ramp(v, 0.815, "material-decelerate", "resume"),
+        Autoplay(v, 1.196),  # ends at 10.667 s = 640 frames at 60 fps
+    ])  # fmt: skip
+    cur = drag_cursor(
+        profile,
+        "x",
+        DRAG_START,
+        [((760.0, 400.0), (420.0, 650.0)), ((450.0, 400.0), (900.0, 650.0)),
+         ((800.0, 400.0), (420.0, 650.0))],
+    )  # fmt: skip
+    cur.visible = False
+    return _continuous_def(
+        "C14",
+        "Dark carousel with flat placeholder cards (plain fill + title, no photo texture; "
+        "164×150, gap 4, rigid); autoplay 35 px/s right; fling "
+        "left 450 px (release -1400 px/s) and fling right 320 px (release +1100 px/s), each "
+        "momentum τ 260 ms blending into autoplay; a 600 px drag left that slows to a stop "
+        "while pressed → held 200 ms → resume 815 ms material-decelerate. No cursor, 60 fps.",
+        ["region / card on flat cards", "phase sequence", "drag ends at rest", "resume"],
+        strip, profile, cur, kind="drag", pause_on="press", pause_on_accept=("unknown",),
+    )  # fmt: skip
+
+
+def hover_with_ambient_marquee() -> ScenarioDef:
+    """S1 card hover, plus an autoplay-only chip ticker below it moving from t=0."""
+    base = card_hover()
+    old = base.scene
+    ticker = Strip("amb_", "x", 260, 612, 760, 80, card_w=140, card_h=56, gap=16, lead=8,
+                   cross=12, layout="chip", seed=500)  # fmt: skip
+    profile = VelocityProfile([Autoplay(-50.0, old.duration_s)])
+    scene = Scene(
+        width=old.width, height=old.height, background=old.background,
+        static_nodes=old.static_nodes, nodes=[*old.nodes, ticker.node()],
+        timeline=old.timeline, cursor=old.cursor, duration_s=old.duration_s,
+        drivers={ticker.track_id: ticker.driver(profile)},
+    )  # fmt: skip
+    return replace(
+        base,
+        scenario="C11",
+        description=base.description + " Plus an autoplay-only ticker (chips 140×56, pitch 156) "
+        "at y 612 moving left at 50 px/s from t=0 (ambient; must be masked).",
+        checks=["transition mode", "S1 §11.4 thresholds", "warning ambient_motion_masked"],
+        scene=scene,
+        suite="continuous",
+        mode="transition",
+        expected_warnings=["ambient_motion_masked"],
+        ambient=[ContinuousDef(strip=ticker, profile=profile)],
+    )
+
+
+# ---- N1 — ambient motion that is not a scroller --------------------------------------------
+
+
+def negative_ambient_pulse() -> ScenarioDef:
+    box = Node(id="pulse", x=560, y=320, w=160, h=160, fill=c("#6366F1"), radius=16)
+    scene = scene_of([box], idle_cursor(), duration_s=6.0)
+    lo, hi, step = 0.35, 1.0, 0.6
+    for k in range(10):
+        a, b = (hi, lo) if k % 2 == 0 else (lo, hi)
+        add(scene, Tween("pulse", "opacity", "fwd", round(k * step, 3), step, a, b, "ease-in-out"))
+    return ScenarioDef(
+        scenario="N1",
+        description="A box pulses opacity 1 ↔ 0.35 (600 ms ease-in-out legs) from t=0 for 6 s; "
+        "nothing else moves. Ambient motion that is not a scroller.",
+        checks=["continuous_motion_unsupported"],
+        scene=scene,
+        expected_error="continuous_motion_unsupported",
+        suite="continuous",
+    )
+
+
+# --------------------------------------------------------------------------------------------
 # Registry
 # --------------------------------------------------------------------------------------------
 
@@ -840,6 +1560,57 @@ SCENARIOS: list[ScenarioEntry] = [
     ScenarioEntry("negative_static", "S12", negative_static),
     ScenarioEntry("negative_scroll", "S12", negative_scroll),
 ]
+
+_C4 = carousel_drag_inertia
+
+#: PLAN-continuous §8.2 (truth ``suite == "continuous"``; evaluated from P2 on).
+CONTINUOUS_SCENARIOS: list[ScenarioEntry] = [
+    ScenarioEntry("marquee_autoplay", "C1", marquee_autoplay),
+    ScenarioEntry("marquee_fast_loop", "C2", marquee_fast_loop),
+    ScenarioEntry("marquee_hover_pause", "C3", marquee_hover_pause),
+    ScenarioEntry("carousel_drag_inertia", "C4", _C4),
+    ScenarioEntry(
+        "carousel_drag_inertia_no_cursor", "C5", lambda: carousel_drag_inertia(cursor_visible=False)
+    ),
+    ScenarioEntry("carousel_drag_inertia_30fps", "C6", _C4, Variant(fps=30.0, label="30fps")),
+    ScenarioEntry(
+        "carousel_drag_inertia_vfr", "C7", _C4, Variant(encode=EncodeSpec(vfr=True), label="vfr")
+    ),
+    ScenarioEntry("carousel_drag_snap", "C8", carousel_drag_snap),
+    ScenarioEntry(
+        "carousel_fling_fast_crf28",
+        "C9",
+        carousel_fling_fast,
+        Variant(fps=30.0, encode=EncodeSpec(crf=28), label="30fps_crf28"),
+    ),
+    ScenarioEntry("ticker_vertical_autoplay", "C10", lambda: marquee_hover_pause(vertical=True)),
+    ScenarioEntry("hover_with_ambient_marquee", "C11", hover_with_ambient_marquee),
+    # P2 regression for the motivating recording's clock: C5 (no cursor) captured on a 75 Hz
+    # grid (13.3 / 26.7 ms stamps) while the page renders at 60 Hz, MOV container
+    ScenarioEntry(
+        "carousel_drag_inertia_grid75",
+        "C12",
+        lambda: carousel_drag_inertia(cursor_visible=False),
+        Variant(encode=EncodeSpec(container="mov", capture_grid_hz=75.0), label="grid75_mov"),
+    ),
+    # P2b regression for the motivating recording's cards: dark theme, low-contrast cards with
+    # photos, 4 px gaps, cards scaled by their distance from the viewport centre, momentum that
+    # blends into autoplay; 75 Hz capture grid like C12
+    ScenarioEntry(
+        "carousel_dark_edge_zoom",
+        "C13",
+        carousel_dark_edge_zoom,
+        Variant(encode=EncodeSpec(container="mov", capture_grid_hz=75.0), label="grid75_mov"),
+    ),
+    # acceptance-run regression: flat placeholder cards (the row splits into activity pieces),
+    # a drag that stops while pressed, then rest → resume (no glide, no momentum)
+    ScenarioEntry("carousel_flat_held_stop", "C14", carousel_flat_held_stop),
+    ScenarioEntry("negative_ambient_pulse", "N1", negative_ambient_pulse),
+]
+
+#: The transition suite (S1–S12) as it existed before PLAN-continuous (17 entries).
+TRANSITION_SCENARIOS: list[ScenarioEntry] = list(SCENARIOS)
+SCENARIOS += CONTINUOUS_SCENARIOS
 
 BY_NAME: dict[str, ScenarioEntry] = {e.name: e for e in SCENARIOS}
 
@@ -952,6 +1723,254 @@ def cursor_events(defn: ScenarioDef) -> list[TruthCursorEvent]:
     return events
 
 
+@functools.cache
+def cap_height(font_px: float, weight: float = 1.0) -> float:
+    """Rendered ink height (CSS px) of a capital "H" in the synth font (measured at 8×)."""
+    node = Node(id="_cap", shape="text", text="H", font_px=font_px, weight=weight)
+    cov = build_sprite(node, 8.0).cov
+    rows = np.flatnonzero((cov > 0.5).any(axis=1))
+    return round((rows[-1] - rows[0] + 1) / 8.0, 2)
+
+
+def appearance(scene: Scene, node_id: str, t_a: float, t_b: float) -> TruthAppearance:
+    """Rendered static appearance of a node in state A (PLAN-continuous §13)."""
+    node = scene.node(node_id)
+    fill = scene.value(node, "fill", t_a)
+    bg = rgb_to_hex(fill) if node.shape in ("rect", "icon") else None  # type: ignore[arg-type]
+    texts = [n for n in node.walk() if n.shape == "text"]
+    colors = {rgb_to_hex(scene.value(n, "fill", t_a)) for n in texts}  # type: ignore[arg-type]
+    fonts = {(n.font_px, n.weight) for n in texts}
+    tc = colors.pop() if len(colors) == 1 else None
+    font = fonts.pop() if len(fonts) == 1 else None
+    return TruthAppearance(
+        background_color=bg,
+        text_color=tc,
+        font_size_px=font[0] if font else None,
+        cap_height_px=cap_height(*font) if font else None,
+        border_radius_px=node.radius if node.shape in ("rect", "image") else None,
+        opacity_initial=_r(_effective_opacity(scene, node_id, t_a)),
+        opacity_active=_r(_effective_opacity(scene, node_id, t_b)),
+    )
+
+
+def scene_truth(scene: Scene) -> TruthScene:
+    return TruthScene(
+        viewport_css=Size(w=scene.width, h=scene.height),
+        page_background=rgb_to_hex(scene.background),
+    )
+
+
+def _flips(pred: Callable[[int], bool], n: int) -> list[tuple[int, bool]]:
+    """``(ms, new_state)`` where ``pred`` changes on ``0..n`` (10 ms scan refined to 1 ms;
+    assumes no double flip within 10 ms). A true state at 0 is reported as a flip at 0."""
+    state = pred(0)
+    out = [(0, True)] if state else []
+    prev = 0
+    for i in [*range(10, n + 1, 10), n]:
+        now = pred(i)
+        if now != state:
+            j = next(j for j in range(prev + 1, i + 1) if pred(j) == now)
+            out.append((j, now))
+            state = now
+        prev = i
+    return out
+
+
+def sampled_cursor_events(
+    cur: CursorPath | None, box: tuple[float, ...], duration_s: float, element_id: str | None
+) -> list[TruthCursorEvent]:
+    """Cursor events sampled from the actual position function (works for ``DragCursor``):
+    move_start / stationary, enter / leave of ``box``, mousedown / mouseup."""
+    if cur is None or not cur.visible:
+        return []
+    n = int(round(duration_s * 1000))
+    bx, by, bw, bh = box
+
+    def pos(i: int) -> tuple[float, float]:
+        return cur.position(i / 1000.0)
+
+    def moving(i: int) -> bool:
+        (x0, y0), (x1, y1) = pos(i), pos(i + 1)
+        return abs(x1 - x0) + abs(y1 - y0) > 1e-6
+
+    def inside(i: int) -> bool:
+        x, y = pos(i)
+        return bx <= x <= bx + bw and by <= y <= by + bh
+
+    events = [
+        TruthCursorEvent(t_ms=t, kind="move_start" if on else "stationary")
+        for t, on in _flips(moving, n)
+    ]
+    events += [
+        TruthCursorEvent(t_ms=t, kind="enter" if on else "leave", element_id=element_id)
+        for t, on in _flips(inside, n)
+    ]
+    for down, up in cur.clicks:
+        events.append(TruthCursorEvent(t_ms=_ms_int(down), kind="mousedown"))
+        events.append(TruthCursorEvent(t_ms=_ms_int(up), kind="mouseup"))
+    events.sort(key=lambda e: (e.t_ms, e.kind))
+    return events
+
+
+def _truth_easing(name: str) -> TruthEasing:
+    bez, fam = EASINGS[name]
+    return TruthEasing(
+        name=name, cubic_bezier=bez, family=fam, keyword=name if name in CSS_KEYWORDS else None
+    )
+
+
+def _median(vals: list[float]) -> float | None:
+    return float(statistics.median(vals)) if vals else None
+
+
+def _median_ms(vals: list[int]) -> int | None:
+    m = _median([float(v) for v in vals])
+    return None if m is None else int(round(m))
+
+
+def continuous_truth(cdef: ContinuousDef, *, cursor_visible: bool) -> TruthContinuous:
+    """Ground truth of one scroller, derived from the profile that drives the renderer."""
+    strip, prof = cdef.strip, cdef.profile
+    segs = prof.segments
+    zoom = strip.zoom
+    # zoomed strip (P2b): on screen every content point moves at s(x) times the layout speed;
+    # the truth speeds are those of the rigid strip that covers the same screen distance on
+    # average over the viewport (``EdgeZoom.mean_scale``); 1.0 (identity) for a rigid strip
+    f = zoom.mean_scale() if zoom is not None else 1.0
+    phases: list[TruthPhase] = []
+    last_rest_ms: int | None = None
+    last_release_ms: int | None = None
+    for sg in segs:
+        kw: dict = {}
+        spec = sg.spec
+        if sg.kind == "inertia":
+            kw = dict(tau_ms=_r(spec.tau * 1000.0), v0_px_s=_r(sg.v_a * f),  # type: ignore[union-attr]
+                      v_inf_px_s=_r(sg.v_b * f))  # fmt: skip
+        elif sg.kind in ("decelerate", "resume"):
+            kw = dict(ramp_ms=sg.t1_ms - sg.t0_ms, easing=_truth_easing(spec.easing))  # type: ignore[union-attr]
+        elif sg.kind == "snap":
+            kw = dict(easing=_truth_easing(spec.easing), snap_step_px=_r(spec.step * f),  # type: ignore[union-attr]
+                      snap_distance_px=_r((sg.target - sg.x0) * f))  # fmt: skip
+        elif sg.kind == "drag":
+            kw = dict(pointer_ratio=1.0)
+        if sg.kind == "resume":
+            if last_rest_ms is None:
+                raise ValueError("resume without a preceding rest")
+            kw["delay_after_rest_ms"] = sg.t0_ms - last_rest_ms
+            kw["delay_after_release_ms"] = (
+                sg.t0_ms - last_release_ms if last_release_ms is not None else None
+            )
+            last_release_ms = None
+        if sg.kind == "drag":
+            # a held stop is let go at an invisible moment: no delay after release (as measured)
+            last_release_ms = sg.t1_ms if abs(sg.v_end) >= 1e-6 else None
+        # rest-reaching phases (inertia ends at its v_stop cut-off, then the content rests; an
+        # inertia that blends into autoplay (v_inf != 0) never rests)
+        if (
+            sg.kind in ("snap", "stop")
+            or (sg.kind == "inertia" and sg.v_b == 0.0)
+            or (sg.kind == "decelerate" and sg.v_end == 0)
+            # a drag that slowed to a stop while pressed (HeldDrag): rests with the pointer
+            or (sg.kind == "drag" and abs(sg.v_end) < 1e-6)
+        ):
+            last_rest_ms = sg.t1_ms
+        phases.append(
+            TruthPhase(
+                kind=sg.kind,
+                start_ms=sg.t0_ms,
+                end_ms=sg.t1_ms,
+                v_start_px_s=_r(sg.v_start * f),
+                v_end_px_s=_r(sg.v_end * f),
+                v_peak_px_s=_r(sg.v_peak() * f),
+                displacement_px=_r(sg.displacement * f),
+                **kw,
+            )
+        )
+
+    auto = next((sg for sg in segs if sg.kind == "autoplay"), None)
+    v_auto = auto.spec.v * f if auto is not None else None  # type: ignore[union-attr]
+    if v_auto is None:
+        direction = None
+    elif strip.axis == "x":
+        direction = "right" if v_auto > 0 else "left"
+    else:
+        direction = "down" if v_auto > 0 else "up"
+    observable = prof.travel_range() >= strip.period + 0.5 * strip.view_len
+    drags = [p for p in phases if p.kind == "drag"]
+    resumes = [p for p in phases if p.kind == "resume"]
+    decels = [p for p in phases if p.kind == "decelerate"]
+    snaps = [p for p in phases if p.kind == "snap"]
+    inertias = [p for p in phases if p.kind == "inertia"]
+    releases = [
+        abs(a.v_end_px_s)
+        for a, b in zip(phases, phases[1:], strict=False)
+        if a.kind == "drag" and b.kind in ("inertia", "snap", "stop")
+    ]
+    sample = next(n for n in strip.node().walk() if n.id == f"{strip.prefix}c0_0_t")
+    t_end = prof.end_ms / 1000.0
+    profile_rows = [
+        (t, _r(prof.position(t / 1000.0) * f), _r(prof.velocity(t / 1000.0) * f))
+        for t in range(prof.start_ms, prof.end_ms + 1, 20)
+    ]
+    del t_end
+    gap, pitch = strip.centre_geometry()
+    return TruthContinuous(
+        element_id=strip.viewport_id,
+        axis=strip.axis,  # type: ignore[arg-type]
+        region=_box(strip.box),
+        autoplay_velocity_px_s=v_auto,
+        autoplay_direction=direction,  # type: ignore[arg-type]
+        loop=TruthLoop(
+            period_px=_r(strip.period * f),
+            observable=observable,
+            duration_ms=_r(strip.period * f / abs(v_auto) * 1000.0) if v_auto else None,
+        ),
+        pitch_px=_r(pitch),
+        gap_px=_r(gap),
+        card=TruthCard(
+            count=strip.cards,
+            w=strip.card_w,
+            h=strip.card_h,
+            background_color=strip.card_bg,
+            border_radius_px=strip.card_radius,
+            text_color=rgb_to_hex(sample.fill),
+            font_size_px=sample.font_px,
+            cap_height_px=cap_height(sample.font_px, sample.weight),
+        ),
+        span_ms=(prof.start_ms, prof.end_ms),
+        phases=phases,
+        pause_on=cdef.pause_on,  # type: ignore[arg-type]
+        pause_on_accept=list(cdef.pause_on_accept),  # type: ignore[arg-type]
+        pause_decel_ms=_median_ms([p.ramp_ms for p in decels if p.ramp_ms is not None]),
+        resume_delay_after_rest_ms=_median_ms(
+            [p.delay_after_rest_ms for p in resumes if p.delay_after_rest_ms is not None]
+        ),
+        resume_delay_after_release_ms=_median_ms(
+            [p.delay_after_release_ms for p in resumes if p.delay_after_release_ms is not None]
+        ),
+        resume_delay_after_leave_ms=cdef.resume_delay_after_leave_ms,
+        resume_ramp_ms=_median_ms([p.ramp_ms for p in resumes if p.ramp_ms is not None]),
+        resume_direction_preserved=(
+            all((p.v_end_px_s > 0) == (v_auto > 0) for p in resumes)
+            if resumes and v_auto is not None
+            else None
+        ),
+        snap_kind="grid" if snaps else None,
+        drag_count=len(drags),
+        drag_peak_speed_px_s=max((abs(p.v_peak_px_s) for p in drags), default=None),
+        drag_follows_pointer=True if drags and cursor_visible else None,
+        drag_pointer_ratio=1.0 if drags and cursor_visible else None,
+        inertia_tau_ms=_median([p.tau_ms for p in inertias if p.tau_ms is not None]),
+        release_speeds_px_s=[_r(v) for v in releases],
+        profile=profile_rows,
+        zoom=(
+            TruthZoom(edge_scale=strip.zoom_edge, speed_scale=_r(f, 6))
+            if zoom is not None
+            else None
+        ),
+    )
+
+
 def build_truth(entry: ScenarioEntry, defn: ScenarioDef | None = None) -> Truth:
     """Ground truth for a scenario entry (pure; no rendering, no probe info)."""
     defn = defn or entry.build()
@@ -965,7 +1984,8 @@ def build_truth(entry: ScenarioEntry, defn: ScenarioDef | None = None) -> Truth:
         codec=v.encode.codec,
         crf=v.encode.crf,
         fps=v.fps,
-        vfr=v.encode.vfr,
+        vfr=v.encode.irregular,
+        capture_grid_hz=v.encode.capture_grid_hz,
         pixel_ratio=r,  # type: ignore[arg-type]
         css_width=scene.width,
         css_height=scene.height,
@@ -985,11 +2005,17 @@ def build_truth(entry: ScenarioEntry, defn: ScenarioDef | None = None) -> Truth:
         variant=v.label,
         description=defn.description,
         checks=defn.checks,
+        suite=defn.suite,
+        mode=defn.mode,
+        expected_warnings=list(defn.expected_warnings),
         video=video,
+        scene=scene_truth(scene),
         cursor=cursor,
     )
     if defn.expected_error is not None:
         return Truth(expected_error=defn.expected_error, **common)  # type: ignore[arg-type]
+    if defn.continuous is not None:
+        return _build_continuous_truth(defn, common)
 
     tws = scene.timeline.tweens
     t_a, t_b = state_times(defn)
@@ -1017,6 +2043,7 @@ def build_truth(entry: ScenarioEntry, defn: ScenarioDef | None = None) -> Truth:
                 bbox_active=_box(b_b),
                 visible_initial=_effective_opacity(scene, em.node, t_a) > 0.01 and b_a[3] > 0.5,
                 visible_active=_effective_opacity(scene, em.node, t_b) > 0.01 and b_b[3] > 0.5,
+                appearance=appearance(scene, em.node, t_a, t_b),
             )
         )
     el_order = {e.node: i for i, e in enumerate(defn.elements)}
@@ -1102,5 +2129,42 @@ def build_truth(entry: ScenarioEntry, defn: ScenarioDef | None = None) -> Truth:
         segments=segs,
         transitions=transitions,
         relationships=rels,
+        ambient=[continuous_truth(a, cursor_visible=False) for a in defn.ambient],
+        **common,  # type: ignore[arg-type]
+    )
+
+
+def _build_continuous_truth(defn: ScenarioDef, common: dict) -> Truth:
+    cdef = defn.continuous
+    assert cdef is not None and defn.interaction is not None
+    scene = defn.scene
+    cur = scene.cursor
+    visible = cur is not None and cur.visible
+    vp = cdef.strip.viewport_id
+    t_end = scene.duration_s
+    elements = [
+        TruthElement(
+            id=vp,
+            label=em.label,
+            role=em.role,  # type: ignore[arg-type]
+            kind=em.kind,  # type: ignore[arg-type]
+            bbox_initial=_box(scene.box(vp, 0.0)),
+            bbox_active=_box(scene.box(vp, 0.0)),
+            visible_initial=True,
+            visible_active=True,
+            appearance=appearance(scene, vp, 0.0, 0.0),
+        )
+        for em in defn.elements
+    ]
+    common = dict(common)
+    common["cursor"] = TruthCursor(
+        visible=visible,
+        style=cur.style if cur is not None else "arrow",  # type: ignore[arg-type]
+        events=sampled_cursor_events(cur, cdef.strip.box, t_end, vp),
+    )
+    return Truth(
+        interaction=TruthInteraction(**defn.interaction),
+        elements=elements,
+        continuous=continuous_truth(cdef, cursor_visible=visible),
         **common,  # type: ignore[arg-type]
     )

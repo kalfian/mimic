@@ -10,6 +10,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 FFMPEG = shutil.which("ffmpeg")
@@ -60,12 +61,69 @@ def ui_clip(dst: Path) -> Path:
     return dst
 
 
+def scroller_frames(
+    *, w: int = 480, h: int = 240, fps: float = 30.0, duration: float = 4.0
+) -> tuple[np.ndarray, list[np.ndarray]]:
+    """A carousel the continuous path can analyse (PLAN-continuous P2 tests).
+
+    Viewport 400×120 at (40, 60) on a light page; cards 80×80 every 100 px (gap 20) with a
+    bar inside; content autoplays right at 40 px/s, is pressed at 1.5 s and dragged left at
+    −500 px/s for 0.3 s, released (inertia τ 0.2 s) and rests until the end. Returns the
+    content positions (px, per frame) and BGR frames."""
+    t = np.arange(int(duration * fps)) / fps
+    v = np.where(t < 1.5, 40.0, 0.0)
+    drag = (t >= 1.5) & (t < 1.8)
+    v[drag] = -500.0 * np.clip((t[drag] - 1.5) / 0.06, 0, 1)
+    rel = t >= 1.8
+    v[rel] = -500.0 * np.exp(-(t[rel] - 1.8) / 0.2)
+    v[(t >= 1.8) & (np.abs(v) < 10.0)] = 0.0
+    pos = np.concatenate([[0.0], np.cumsum(v[1:] / fps)])
+    strip_len = 2000
+    strip = np.zeros((120, strip_len, 3), np.uint8)
+    strip[:] = (235, 231, 229)
+    for k, x0 in enumerate(range(0, strip_len, 100)):
+        hue = (40 * k) % 180
+        card = np.full((80, 80, 3), (250, 250, 250), np.uint8)
+        card[12:40, 10:70] = (60 + hue, 140, 220 - hue)
+        card[52:60, 10:50] = (40, 40, 40)
+        strip[20:100, x0 + 10 : x0 + 90] = card
+    frames = []
+    for x in pos:
+        img = np.full((h, w, 3), (246, 244, 243), np.uint8)
+        off = int(round(-x)) % 1000 + 200  # wrap inside the (periodic) strip
+        img[60:180, 40:440] = strip[:, off : off + 400]
+        frames.append(img)
+    return pos, frames
+
+
+def scroller_clip(dst: Path) -> Path:
+    """:func:`scroller_frames` encoded as H.264 (480×240, 30 fps, 4 s)."""
+    assert FFMPEG is not None
+    _, frames = scroller_frames()
+    h, w = frames[0].shape[:2]
+    proc = subprocess.Popen(
+        [
+            FFMPEG, "-nostdin", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24",
+            "-s", f"{w}x{h}", "-r", "30", "-i", "-", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-crf", "18", str(dst),
+        ],
+        stdin=subprocess.PIPE,
+    )  # fmt: skip
+    assert proc.stdin is not None
+    for f in frames:
+        proc.stdin.write(f.tobytes())
+    proc.stdin.close()
+    assert proc.wait() == 0
+    return dst
+
+
 def build_clip_set(root: Path) -> dict[str, Path]:
     """Every clip the Track A tests need, keyed by purpose."""
     root.mkdir(parents=True, exist_ok=True)
     clips: dict[str, Path] = {}
     clips["ok_mp4"] = testsrc(root / "ok.mp4", duration=2.0, size="320x240", rate=30)
     clips["ui_mp4"] = ui_clip(root / "ui.mp4")
+    clips["scroller_mp4"] = scroller_clip(root / "scroller.mp4")
     clips["ok_mov"] = testsrc(
         root / "ok.mov", codec_args=("-c:v", "libx264", "-pix_fmt", "yuv420p", "-f", "mov")
     )

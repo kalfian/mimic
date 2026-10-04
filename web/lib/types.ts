@@ -4,14 +4,14 @@
 
 /* ---------- named literal types ---------- */
 
-export type InteractionType = "hover" | "click" | "press" | "expand_collapse" | "dropdown" | "modal" | "unknown";
+export type InteractionType = "hover" | "click" | "press" | "expand_collapse" | "dropdown" | "modal" | "unknown" | "continuous" | "drag";
 export type TypeSource = "heuristic" | "interpreter";
-export type Pattern = "card" | "button" | "menu" | "accordion" | "modal" | "generic";
-export type TriggerKind = "pointer_enter" | "click" | "unknown";
+export type Pattern = "card" | "button" | "menu" | "accordion" | "modal" | "generic" | "marquee" | "carousel";
+export type TriggerKind = "pointer_enter" | "click" | "unknown" | "autoplay" | "drag";
 export type ReverseTriggerKind = "pointer_leave" | "click" | "none" | "unknown";
-export type Direction = "forward" | "forward_reverse" | "round_trip";
-export type ElementKind = "transform" | "photometric" | "appear" | "disappear" | "backdrop" | "resize" | "content_change";
-export type Role = "card" | "button" | "image" | "icon" | "text" | "title" | "label" | "container" | "dropdown_menu" | "menu_item" | "modal_panel" | "backdrop" | "list_item" | "link" | "input" | "badge" | "accordion_panel" | "other";
+export type Direction = "forward" | "forward_reverse" | "round_trip" | "continuous";
+export type ElementKind = "transform" | "photometric" | "appear" | "disappear" | "backdrop" | "resize" | "content_change" | "scroller";
+export type Role = "card" | "button" | "image" | "icon" | "text" | "title" | "label" | "container" | "dropdown_menu" | "menu_item" | "modal_panel" | "backdrop" | "list_item" | "link" | "input" | "badge" | "accordion_panel" | "other" | "scroller";
 export type LabelSource = "interpreter" | "heuristic";
 export type SegmentId = "fwd" | "rev" | "rt_in" | "rt_out";
 export type SegmentKind = "forward" | "reverse";
@@ -26,9 +26,18 @@ export type InterpretationStatus = "ok" | "fallback" | "timeout" | "error" | "di
 export type PixelRatio = 1 | 2 | 3;
 export type PixelRatioSource = "user" | "auto";
 export type WarningSeverity = "info" | "warn";
-export type WarningCode = "pixel_ratio_assumed" | "timestamps_estimated" | "vfr_source" | "cursor_not_visible" | "extra_segments_ignored" | "elements_truncated" | "short_stable_state" | "not_settled" | "rotation_detected" | "interpretation_fallback" | "interpretation_disagrees" | "low_fps_source" | "preview_unavailable" | "reverse_not_recorded" | "frames_subsampled";
+export type WarningCode = "pixel_ratio_assumed" | "timestamps_estimated" | "vfr_source" | "cursor_not_visible" | "extra_segments_ignored" | "elements_truncated" | "short_stable_state" | "not_settled" | "rotation_detected" | "interpretation_fallback" | "interpretation_disagrees" | "low_fps_source" | "preview_unavailable" | "reverse_not_recorded" | "frames_subsampled" | "ambient_motion_masked" | "extra_scrollers_ignored" | "tracking_degraded" | "loop_period_not_observed";
+export type SchemaVersion = "0.1" | "0.2";
+export type SpecMode = "transition" | "continuous";
+export type Axis = "x" | "y";
+export type AutoplayDirection = "left" | "right" | "up" | "down";
+export type PhaseKind = "autoplay" | "decelerate" | "paused" | "drag" | "inertia" | "snap" | "stop" | "resume" | "unknown";
+export type PhaseEvidence = "velocity" | "cursor" | "velocity+cursor";
+export type PauseTrigger = "hover" | "press" | "unknown";
+export type InertiaModel = "exponential" | "tween";
+export type SnapKind = "grid" | "abrupt_ambiguous";
 export type PixelRatioOption = "auto" | "1" | "2" | "3";
-export type KeyframeKind = "state_a" | "state_b" | "mid_25" | "mid_50" | "mid_75" | "annotated_a" | "annotated_b" | "element";
+export type KeyframeKind = "state_a" | "state_b" | "mid_25" | "mid_50" | "mid_75" | "annotated_a" | "annotated_b" | "element" | "phase";
 export type UserRole = "admin" | "user";
 
 /** Animated value; `kind` is fixed per property (see PROPERTY_VALUE_KIND). */
@@ -65,12 +74,60 @@ export interface AuthStatus {
   setup_required: boolean;
 }
 
+/** Constant-velocity autoplay before any interaction. */
+export interface Autoplay {
+  direction: AutoplayDirection;
+  /** |velocity|, CSS px/s (> 0). */
+  speed_px_s: MeasuredNumber;
+  /** Signed velocity; same magnitude as speed_px_s. */
+  velocity_px_s: number;
+  easing: "linear";
+  loop: LoopInfo;
+}
+
+/** What the generators print; each value aggregated over phase instances. null = not seen. */
+export interface Behavior {
+  pause: PauseBehavior | null;
+  drag: DragBehavior | null;
+  inertia: InertiaBehavior | null;
+  snap: SnapBehavior | null;
+  resume: ResumeBehavior | null;
+}
+
 /** Axis-aligned rectangle in CSS px, full-frame coordinates (x, y = top-left). */
 export interface Box {
   x: number;
   y: number;
   w: number;
   h: number;
+}
+
+/**
+ * Cards scale with their on-screen distance from the scroller centre (a position-driven
+ * transform updated every frame; PLAN-continuous P2c).
+ *
+ * `scale(d) = 1 + (scale_at_reference - 1) · (d / reference_distance_px)²` where `d` is
+ * the distance (CSS px, along the axis) of a card's centre from the scroller centre: 1 at the
+ * centre, so the card element box, `pitch_px` and `gap_px` describe the card at the
+ * centre. `reference_distance_px` is the farthest whole card measured (the curve beyond is
+ * an extrapolation). The cards stay packed — the gaps keep their size — so neighbours move
+ * apart as they grow.
+ *
+ * Speeds and displacements in the `continuous` section are on-screen values; on average over
+ * the scroller the content is magnified `mean_scale` times (`1 + (scale_at_reference - 1)
+ * · (half / reference_distance_px)² / 3`, half = half the region length along the axis),
+ * so an unscaled track moves at `speed / mean_scale`. Stored so outputs can quote it.
+ */
+export interface CardScale {
+  model: "quadratic";
+  origin: "scroller_center";
+  /** Farthest measured card-centre distance from the scroller centre. */
+  reference_distance_px: number;
+  /** Card scale at reference_distance_px. */
+  scale_at_reference: number;
+  /** Mean on-screen magnification over the scroller (speed conversion). */
+  mean_scale: number;
+  confidence: Confidence;
 }
 
 /** `POST /api/auth/password` body. The policy is checked in code (`weak_password`). */
@@ -92,6 +149,37 @@ export interface Confidence {
   band: ConfidenceBand;
 }
 
+/** `x(t) = x0 + v t` (autoplay). */
+export interface ConstantFit {
+  model: "constant";
+  velocity_px_s: MeasuredNumber;
+}
+
+/** The analysed scroller (`mode == "continuous"` only). */
+export interface ContinuousMotion {
+  /** MotionElement with kind "scroller". */
+  element_id: string;
+  axis: Axis;
+  /** Scroller viewport, CSS px. */
+  region: Box;
+  region_confidence: Confidence;
+  sign_convention: "positive = content moves right (x) / down (y)";
+  /** null = no autoplay before interaction. */
+  autoplay: Autoplay | null;
+  /** Card spacing (card + gap) if observed. */
+  pitch_px: MeasuredNumber | null;
+  /** Gap between cards if observed (PLAN-continuous §13). */
+  gap_px: MeasuredNumber | null;
+  /** Cards scale with their distance from the scroller centre. Omitted when the cards were rigid or not measured. */
+  card_scale?: CardScale | null;
+  phases: Phase[];
+  behavior: Behavior;
+  /** Analysed span (= interaction.total_duration_ms.forward). */
+  span_ms: Span;
+  /** [t_ms, v_px_s, pos_px, quality] for the velocity chart. Excluded from the JSON export. */
+  samples: [number, number, number, number][];
+}
+
 /** `POST /api/admin/users` body. The username is stripped + lowercased, then validated. */
 export interface CreateUserRequest {
   username: string;
@@ -111,6 +199,16 @@ export interface CursorEvent {
   element_id: string | null;
 }
 
+export interface DragBehavior {
+  /** Number of drag phases. */
+  count: number;
+  /** null = no cursor visible to compare. */
+  follows_pointer: boolean | null;
+  /** Content / pointer velocity. */
+  pointer_ratio: MeasuredNumber | null;
+  peak_speed_px_s: MeasuredNumber;
+}
+
 /** Fitted timing function. `keyword` is set only when the fit *is* a CSS keyword curve. */
 export interface Easing {
   keyword: CssEasingKeyword | null;
@@ -124,10 +222,19 @@ export interface Easing {
   flags: "overshoot"[];
 }
 
-/** Non-animated element properties (low confidence heuristics). */
+/**
+ * Non-animated element properties (low confidence heuristics), measured in state A.
+ *
+ * The appearance values (PLAN-continuous §13) are optional and omitted from the JSON when not
+ * measured: `background_color` (element fill), `text_color` (text-like elements only) and
+ * `font_size_px` (rough estimate from the text line height; confidence at most medium).
+ */
 export interface ElementStatic {
   border_radius_px: MeasuredNumber | null;
   shadow: MeasuredShadow | null;
+  background_color?: MeasuredColor | null;
+  text_color?: MeasuredColor | null;
+  font_size_px?: MeasuredNumber | null;
 }
 
 /** Every non-2xx JSON response: `{"error": {"code", "message"}}`. */
@@ -136,11 +243,23 @@ export interface ErrorBody {
 }
 
 /** Closed set of error codes shared with the frontend (`web/lib/types.ts`). */
-export type ErrorCode = "unsupported_format" | "file_too_large" | "too_long" | "too_short" | "decode_failed" | "invalid_request" | "no_motion_detected" | "unsupported_motion" | "no_stable_state" | "internal_error" | "interrupted" | "not_found" | "not_ready" | "already_running" | "unauthenticated" | "invalid_credentials" | "account_disabled" | "forbidden" | "password_change_required" | "origin_not_allowed" | "too_many_attempts" | "setup_required" | "last_admin" | "self_action_forbidden" | "username_taken" | "weak_password" | "current_password_incorrect";
+export type ErrorCode = "unsupported_format" | "file_too_large" | "too_long" | "too_short" | "decode_failed" | "invalid_request" | "no_motion_detected" | "unsupported_motion" | "no_stable_state" | "continuous_motion_unsupported" | "internal_error" | "interrupted" | "not_found" | "not_ready" | "already_running" | "unauthenticated" | "invalid_credentials" | "account_disabled" | "forbidden" | "password_change_required" | "origin_not_allowed" | "too_many_attempts" | "setup_required" | "last_admin" | "self_action_forbidden" | "username_taken" | "weak_password" | "current_password_incorrect";
 
 export interface ErrorDetail {
   code: ErrorCode;
   message: string;
+}
+
+/** Inertia: `v(t) = v_inf + (v0 - v_inf) e^(-t/tau)`, fitted in the position domain. */
+export interface ExponentialFit {
+  model: "exponential";
+  tau_ms: MeasuredNumber;
+  /** Release velocity (signed). */
+  v0_px_s: MeasuredNumber;
+  /** Asymptotic velocity: 0 or the autoplay velocity. */
+  v_inf_px_s: number;
+  /** Speed (|v| of the decay) at which the content was observed to come to rest; the momentum is dropped below it. Omitted when the decay did not end at rest. */
+  stop_px_s?: number | null;
 }
 
 /**
@@ -171,6 +290,22 @@ export interface HealthLimits {
   min_duration_s: number;
   /** Extra seconds tolerated over the maximum. */
   duration_tolerance_s: number;
+}
+
+/** Momentum after release, aggregated over `instances` inertia phases. */
+export interface InertiaBehavior {
+  model: InertiaModel;
+  /** Set when model is exponential. */
+  tau_ms: MeasuredNumber | null;
+  /** Set when model is tween. */
+  duration_ms: MeasuredNumber | null;
+  /** Set when model is tween. */
+  easing: Easing | null;
+  release_speed_min_px_s: number;
+  release_speed_max_px_s: number;
+  instances: number;
+  /** Exponential model: minimum speed at which the momentum stops (aggregated ExponentialFit.stop_px_s). Omitted when not observed. */
+  stop_px_s?: MeasuredNumber | null;
 }
 
 export interface Interaction {
@@ -307,6 +442,18 @@ export interface LoginRequest {
   password: string;
 }
 
+/**
+ * Seamless-loop length of the autoplay content. Never guessed: `observed` is false when
+ * the content did not repeat within the recording (`period_px`/`duration_ms` null).
+ */
+export interface LoopInfo {
+  observed: boolean;
+  /** Length of one content copy, CSS px. */
+  period_px: MeasuredNumber | null;
+  /** period_px / speed (stored so outputs can quote it, never recomputed). */
+  duration_ms: MeasuredNumber | null;
+}
+
 /** `GET /api/auth/me`, `POST /api/auth/login`, `POST /api/auth/password`. */
 export interface Me {
   id: string;
@@ -314,6 +461,13 @@ export interface Me {
   role: UserRole;
   must_change_password: boolean;
   created_at: string;
+}
+
+/** A static (non-animated) solid colour estimate with its own confidence. */
+export interface MeasuredColor {
+  /** Uppercase #RRGGBB. */
+  value: string;
+  confidence: Confidence;
 }
 
 /** A static (non-animated) measurement with its own confidence. */
@@ -352,17 +506,26 @@ export interface MotionElement {
   static: ElementStatic;
 }
 
-/** Root of the IR. Cross-references (element/segment/transition ids) are validated. */
+/**
+ * Root of the IR. Cross-references (element/segment/transition ids) are validated.
+ *
+ * `mode` selects the shape: `transition` (segments + transitions, PLAN §8) or
+ * `continuous` (one scroller in `continuous`; no segments/transitions/relationships).
+ */
 export interface MotionSpec {
-  schema_version: "0.1";
+  schema_version: SchemaVersion;
   job_id: string;
   meta: Meta;
+  mode: SpecMode;
   source: Source;
+  scene?: Scene | null;
   interaction: Interaction;
   elements: MotionElement[];
+  /** Transition mode: >= 1 segment. Continuous mode: empty. */
   segments: Segment[];
   transitions: Transition[];
   relationships: Relationship[];
+  continuous?: ContinuousMotion | null;
   cursor: Cursor;
   structure: string[];
   interpretation: Interpretation;
@@ -373,19 +536,64 @@ export interface MotionSpec {
   active_state: Record<string, Partial<Record<Property, Value>>>;
 }
 
-/** The four text tabs. Serialized keys: `technical`, `llm_prompt`, `css`, `json`. */
+/**
+ * The text tabs. Serialized keys: `technical`, `llm_prompt`, `css`, `json` and, in
+ * continuous mode only, `js` (omitted when null, so transition outputs are unchanged).
+ */
 export interface Outputs {
   technical: string;
   llm_prompt: string;
   css: string;
-  /** Pretty IR export without transition samples. */
+  /** Pretty IR export without transition / continuous samples. */
   json: string;
+  /** Suggested JS driver (continuous mode only; absent in transition mode). */
+  js?: string | null;
+}
+
+/** Autoplay slows to a stop when the pointer hovers / presses (`on`). */
+export interface PauseBehavior {
+  on: PauseTrigger;
+  on_confidence: Confidence;
+  decel_ms: MeasuredNumber | null;
+  easing: Easing | null;
+  stops_completely: boolean;
+}
+
+/** One labelled stretch of the scroller's velocity profile (chronological, no overlap). */
+export interface Phase {
+  id: string;
+  kind: PhaseKind;
+  /** Milliseconds. */
+  start_ms: number;
+  /** Milliseconds. */
+  end_ms: number;
+  v_start_px_s: number;
+  v_end_px_s: number;
+  /** Signed velocity with the largest magnitude. */
+  v_peak_px_s: number;
+  displacement_px: number;
+  fit: ConstantFit | ExponentialFit | RampFit | TweenFit | null;
+  /** Cut short, e.g. decelerate cut by a drag, inertia re-grabbed. */
+  interrupted: boolean;
+  evidence: PhaseEvidence;
+  /** Label confidence. */
+  confidence: Confidence;
+  notes: string[];
 }
 
 /** Length in CSS px (translate, height, border-radius). */
 export interface PxValue {
   kind: "px";
   number: number;
+}
+
+/** Eased velocity ramp `v = from + (to - from) E((t - t0) / D)` (decelerate / resume). */
+export interface RampFit {
+  model: "ramp";
+  from_px_s: number;
+  to_px_s: number;
+  duration_ms: MeasuredNumber;
+  easing: Easing;
 }
 
 /** Unitless ratio (scale, opacity). */
@@ -414,6 +622,24 @@ export interface ResultEnvelope {
   spec: MotionSpec;
   outputs: Outputs;
   artifacts: Artifacts;
+}
+
+export interface ResumeBehavior {
+  delay_after_rest_ms: MeasuredNumber;
+  delay_after_release_ms: MeasuredNumber | null;
+  /** Hover pause: resume onset after the pointer left the scroller. Omitted when no pointer leave was seen before the resume. */
+  delay_after_leave_ms?: MeasuredNumber | null;
+  ramp_ms: MeasuredNumber;
+  easing: Easing | null;
+  to_speed_px_s: number;
+  direction_preserved: boolean;
+}
+
+/** Recorded page context (PLAN-continuous §13). Optional; omitted when not measured. */
+export interface Scene {
+  /** Recorded frame size in CSS px. */
+  viewport_css: Size;
+  page_background?: MeasuredColor | null;
 }
 
 /**
@@ -451,6 +677,25 @@ export interface ShadowValue {
   shadow: Shadow | null;
 }
 
+/** Width x height in CSS px. */
+export interface Size {
+  w: number;
+  h: number;
+}
+
+/**
+ * `grid`: rests land on the card pitch. `abrupt_ambiguous`: abrupt stops that may be a
+ * snap or the pointer stopping before release (no grid evidence; from `stop` phases).
+ */
+export interface SnapBehavior {
+  kind: SnapKind;
+  step_px: MeasuredNumber | null;
+  duration_ms: MeasuredNumber | null;
+  easing: Easing | null;
+  /** Spring-like overshoot seen; spring not reconstructed. */
+  overshoot: boolean;
+}
+
 /** Input video facts. `width`/`height` are source pixels after rotation (not CSS px). */
 export interface Source {
   filename: string;
@@ -468,6 +713,13 @@ export interface Source {
   pixel_ratio_source: PixelRatioSource;
   /** Median frame interval, rounded. */
   timing_resolution_ms: number;
+}
+
+export interface Span {
+  /** Milliseconds. */
+  start_ms: number;
+  /** Milliseconds. */
+  end_ms: number;
 }
 
 export interface SpecWarning {
@@ -545,6 +797,15 @@ export interface Trigger {
   confidence: Confidence;
 }
 
+/** Eased position tween `x = x0 + D E((t - t0) / T)` (snap, tween-style inertia). */
+export interface TweenFit {
+  model: "tween";
+  /** Signed distance travelled. */
+  distance_px: MeasuredNumber;
+  duration_ms: MeasuredNumber;
+  easing: Easing;
+}
+
 /** `PATCH /api/admin/users/{id}` body. At least one field must be set (non-null). */
 export interface UpdateUserRequest {
   role?: UserRole | null;
@@ -553,7 +814,7 @@ export interface UpdateUserRequest {
 
 /* ---------- constants mirrored from the backend ---------- */
 
-export const SCHEMA_VERSION = "0.1" as const;
+export const SCHEMA_VERSION = "0.2" as const;
 
 /** Pipeline stages in execution order (core/stages.py). */
 export const STAGE_ORDER: readonly Stage[] = ["queued", "probing", "preview", "scanning", "decoding", "detecting_elements", "measuring", "fitting", "interpreting", "generating", "done"];
@@ -609,6 +870,13 @@ export const BAND_HIGH_MIN = 0.8;
 export const BAND_MEDIUM_MIN = 0.5;
 /** Transitions with overall confidence below this are 'uncertain observations'. */
 export const UNCERTAIN_BELOW = 0.3;
+
+/** Continuous mode: phase kinds in grammar order (PLAN-continuous §4.5). */
+export const PHASE_KINDS: readonly PhaseKind[] = ["autoplay", "decelerate", "paused", "drag", "inertia", "snap", "stop", "resume", "unknown"];
+/** Max points in `ContinuousMotion.samples` ([t_ms, v_px_s, pos_px, quality]). */
+export const CONTINUOUS_SAMPLE_MAX = 900;
+/** Sign of every continuous-mode velocity / displacement. */
+export const SIGN_CONVENTION = "positive = content moves right (x) / down (y)" as const;
 
 /** Password length bounds (characters after NFKC normalization, app/auth/policy.py). */
 export const PASSWORD_MIN_LENGTH = 12;
